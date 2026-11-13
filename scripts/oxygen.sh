@@ -53,6 +53,8 @@ cmd_build() {
   (cd "${ROOT_DIR}/oxygen-core" && "${LOWPRIO[@]}" npm run --silent build)
   echo "==> Control Center + service worker -> dist/extension"
   (cd "${ROOT_DIR}/control-center" && "${LOWPRIO[@]}" npm run --silent build:extension)
+  # New code => new manifest version, or Chromium keeps the old service worker (see the script).
+  node "${ROOT_DIR}/scripts/stamp_version.mjs" "${DIST}/extension" "${DIST}/.build-state.json"
   echo "==> Theme packs -> dist/themes"
   "${LOWPRIO[@]}" node "${ROOT_DIR}/scripts/build_themes.mjs" "${DIST}/themes"
   # vite empties dist/extension; keep a previous Helium shortcut import in the build.
@@ -187,6 +189,7 @@ cmd_verify() {
   "${LOWPRIO[@]}" node "${ROOT_DIR}/tests/e2e/verify_extension.mjs" --binary "$(helium_bin)" "$@"
   "${LOWPRIO[@]}" node "${ROOT_DIR}/tests/e2e/verify_features.mjs" --binary "$(helium_bin)" "$@"
   "${LOWPRIO[@]}" node "${ROOT_DIR}/tests/e2e/verify_import.mjs" --binary "$(helium_bin)" "$@"
+  "${LOWPRIO[@]}" node "${ROOT_DIR}/tests/e2e/verify_upgrade.mjs" --binary "$(helium_bin)" "$@"
 }
 
 cmd_run() {

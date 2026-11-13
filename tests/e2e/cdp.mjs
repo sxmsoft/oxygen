@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Launches Helium headless at lowest CPU/IO priority with an isolated profile. */
-export async function launchBrowser({ binary, profileDir, extensions = [], extraArgs = [], env = {} }) {
+export async function launchBrowser({ binary, profileDir, extensions = [], extraArgs = [], env = {}, startUrl = 'about:blank' }) {
   const args = [
     '-n', '19', 'ionice', '-c3', binary,
     '--headless=new',
@@ -19,7 +19,7 @@ export async function launchBrowser({ binary, profileDir, extensions = [], extra
     '--window-size=1280,860',
     ...(extensions.length ? [`--load-extension=${extensions.join(',')}`] : []),
     ...extraArgs,
-    'about:blank',
+    ...(startUrl ? [startUrl] : []),
   ];
   const portFile = join(profileDir, 'DevToolsActivePort');
   rmSync(portFile, { force: true }); // stale file from a previous run
@@ -71,7 +71,17 @@ export class CDP {
   send(method, params = {}, sessionId) {
     const id = ++this.id;
     this.ws.send(JSON.stringify({ id, method, params, sessionId }));
-    return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
+    // A CDP call that never answers (e.g. a target that went away) must not hang the suite.
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`CDP ${method} timed out`));
+      }, 30000);
+      this.pending.set(id, {
+        resolve: (v) => (clearTimeout(timer), resolve(v)),
+        reject: (e) => (clearTimeout(timer), reject(e)),
+      });
+    });
   }
   close() { try { this.ws.close(); } catch {} }
 
