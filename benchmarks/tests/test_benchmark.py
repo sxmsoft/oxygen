@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from benchmark_browser import (
     BenchmarkRunResult,
+    benchmark_binary,
     measure_cpu_and_memory,
     sample_process_tree,
     write_comparison_report,
@@ -62,6 +63,11 @@ class BenchmarkInfraTests(unittest.TestCase):
             self.assertTrue(jpath.exists())
             self.assertTrue(mpath.exists())
             self.assertIn("PASS", mpath.read_text(encoding="utf-8"))
+
+    def test_extension_dir_without_manifest_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(FileNotFoundError):
+                benchmark_binary("x", sys.executable, extensions=[tmp])
 
 
 if __name__ == "__main__":

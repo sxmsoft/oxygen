@@ -4,7 +4,10 @@ Oxygen Browser RAM & CPU Benchmark Infrastructure.
 
 Measures cold startup latency, idle CPU utilization, and process-tree memory
 (RSS, PSS, and Private Dirty/Clean USS via /proc/<pid>/smaps_rollup) under
-identical conditions so Oxygen can be compared directly against unmodified Helium.
+identical conditions so Helium + Oxygen extension can be compared against bare Helium.
+
+All browsers run headless, at lowest CPU/IO priority (nice 19, ionice idle), with
+throwaway profiles, so the user's own Helium session is never touched.
 """
 
 from __future__ import annotations
@@ -14,11 +17,14 @@ import http.server
 import json
 import os
 import shutil
+import signal
 import socketserver
+import statistics
 import subprocess
 import tempfile
 import threading
 import time
+import urllib.request
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,6 +57,10 @@ class BenchmarkRunResult:
     workload_cpu_percent: float
     process_count_idle: int
     process_count_workload: int
+    ntp_pss_mb: float = 0.0
+    ntp_rss_mb: float = 0.0
+    iterations: int = 1
+    extensions: tuple[str, ...] = ()
 
 
 def get_descendant_pids(root_pid: int) -> list[int]:
@@ -180,20 +190,149 @@ def measure_cpu_and_memory(pid: int, window_sec: float) -> tuple[ProcessTreeMetr
     return end_metrics, round(cpu_pct, 2)
 
 
+LOW_PRIORITY_PREFIX = ["nice", "-n", "19", "ionice", "-c3"]
+
+
+def _launch(cmd: list[str], low_priority: bool) -> subprocess.Popen:
+    # nice/ionice exec the browser, so proc.pid is the browser's own pid.
+    return subprocess.Popen(
+        [*LOW_PRIORITY_PREFIX, *cmd] if low_priority else cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+def _stop(proc: subprocess.Popen) -> None:
+    """Stops only the browser we started (its own session / process group)."""
+    try:
+        proc.terminate()
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.wait(timeout=5)
+
+
+def _wait_for_devtools(profile: str, timeout_sec: float = 20.0) -> int:
+    """Returns the DevTools port once the browser main loop answers HTTP requests."""
+    port_file = Path(profile) / "DevToolsActivePort"
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        try:
+            port = int(port_file.read_text(encoding="utf-8").splitlines()[0])
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=1):
+                return port
+        except (FileNotFoundError, ValueError, IndexError, OSError):
+            time.sleep(0.02)
+    raise TimeoutError("browser did not expose DevTools in time")
+
+
+def _page_targets(port: int) -> list[dict]:
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list", timeout=2) as r:
+        return [t for t in json.loads(r.read()) if t.get("type") == "page"]
+
+
+def _open_tab(port: int, url: str) -> None:
+    req = urllib.request.Request(f"http://127.0.0.1:{port}/json/new?{url}", method="PUT")
+    urllib.request.urlopen(req, timeout=5).close()
+
+
+def _start(base: list[str], profile: str, url: str, low_priority: bool) -> tuple[subprocess.Popen, int, float]:
+    """Starts the browser on `url`; returns (proc, devtools_port, ms until first page target exists)."""
+    (Path(profile) / "DevToolsActivePort").unlink(missing_ok=True)
+    t0 = time.monotonic()
+    proc = _launch([*base, "--remote-debugging-port=0", url], low_priority)
+    try:
+        port = _wait_for_devtools(profile)
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline and not _page_targets(port):
+            time.sleep(0.02)
+    except Exception:
+        _stop(proc)
+        raise
+    return proc, port, (time.monotonic() - t0) * 1000.0
+
+
+def _single_run(
+    resolved: str,
+    common_flags: list[str],
+    port: int,
+    idle_window_sec: float,
+    workload_window_sec: float,
+    low_priority: bool,
+    settle_sec: float = 3.0,
+) -> dict[str, float]:
+    profile = tempfile.mkdtemp(prefix="ox-bench-")
+    try:
+        base = [resolved, f"--user-data-dir={profile}", *common_flags]
+
+        # 0. Warm-up launch so first-run work (profile creation, extension install)
+        #    is not counted in startup or steady-state memory.
+        proc, _, _ = _start(base, profile, "about:blank", low_priority)
+        time.sleep(settle_sec)
+        _stop(proc)
+
+        # 1. Startup (warm profile) + idle after settling
+        proc, _, startup_ms = _start(base, profile, "about:blank", low_priority)
+        time.sleep(settle_sec)
+        idle_metrics, idle_cpu = measure_cpu_and_memory(proc.pid, idle_window_sec)
+        _stop(proc)
+
+        # 2. New tab page (Helium NTP vs Oxygen Control Center override)
+        proc, _, _ = _start(base, profile, "chrome://newtab/", low_priority)
+        time.sleep(settle_sec)
+        ntp_metrics, _ = measure_cpu_and_memory(proc.pid, 1.0)
+        _stop(proc)
+
+        # 3. Multi-tab local fixture workload (5 tabs; headless allows one URL
+        #    on the command line, the rest are opened over DevTools)
+        proc, dport, _ = _start(base, profile, f"http://127.0.0.1:{port}/tab-1", low_priority)
+        for i in range(2, 6):
+            _open_tab(dport, f"http://127.0.0.1:{port}/tab-{i}")
+        time.sleep(settle_sec)
+        work_metrics, work_cpu = measure_cpu_and_memory(proc.pid, workload_window_sec)
+        _stop(proc)
+
+        mb = lambda kb: kb / 1024.0  # noqa: E731
+        return {
+            "startup_ms": startup_ms,
+            "idle_cpu_percent": idle_cpu,
+            "idle_rss_mb": mb(idle_metrics.rss_kb),
+            "idle_pss_mb": mb(idle_metrics.pss_kb),
+            "idle_uss_mb": mb(idle_metrics.uss_kb),
+            "ntp_rss_mb": mb(ntp_metrics.rss_kb),
+            "ntp_pss_mb": mb(ntp_metrics.pss_kb),
+            "workload_rss_mb": mb(work_metrics.rss_kb),
+            "workload_pss_mb": mb(work_metrics.pss_kb),
+            "workload_cpu_percent": work_cpu,
+            "process_count_idle": idle_metrics.process_count,
+            "process_count_workload": work_metrics.process_count,
+        }
+    finally:
+        shutil.rmtree(profile, ignore_errors=True)
+
+
 def benchmark_binary(
     label: str,
     binary: str,
     idle_window_sec: float = 4.0,
     workload_window_sec: float = 4.0,
     headless: bool = True,
+    extensions: list[str] | None = None,
+    iterations: int = 1,
+    low_priority: bool = True,
 ) -> BenchmarkRunResult:
+    """Runs `iterations` independent measurements and reports the median of each metric."""
     resolved = shutil.which(binary) or binary
     if not Path(resolved).exists():
         raise FileNotFoundError(f"Browser binary not found: {binary}")
-
-    profile_idle = tempfile.mkdtemp(prefix=f"ox-bench-{label}-idle-")
-    profile_work = tempfile.mkdtemp(prefix=f"ox-bench-{label}-work-")
-    server, port = start_local_fixture_server()
+    extensions = [str(Path(e).resolve()) for e in (extensions or [])]
+    for ext in extensions:
+        if not (Path(ext) / "manifest.json").exists():
+            raise FileNotFoundError(f"No manifest.json in extension dir: {ext}")
 
     common_flags = [
         "--no-first-run",
@@ -202,65 +341,38 @@ def benchmark_binary(
     ]
     if headless:
         common_flags.append("--headless=new")
+    if extensions:
+        common_flags.append("--load-extension=" + ",".join(extensions))
 
+    server, port = start_local_fixture_server()
     try:
-        # 1. Idle run & startup timing
-        t_start = time.monotonic()
-        proc_idle = subprocess.Popen(
-            [resolved, f"--user-data-dir={profile_idle}", *common_flags, "about:blank"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        # Wait briefly until browser spawns renderer/main RSS stabilizes
-        deadline = time.monotonic() + 15.0
-        while time.monotonic() < deadline:
-            m = sample_process_tree(proc_idle.pid)
-            if m.process_count >= 2 and m.rss_kb > 20_000:
-                break
-            time.sleep(0.05)
-        startup_ms = round((time.monotonic() - t_start) * 1000.0, 1)
-
-        idle_metrics, idle_cpu = measure_cpu_and_memory(proc_idle.pid, idle_window_sec)
-        proc_idle.terminate()
-        try:
-            proc_idle.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc_idle.kill()
-
-        # 2. Multi-tab local fixture workload (5 tabs)
-        urls = [f"http://127.0.0.1:{port}/tab-{i}" for i in range(1, 6)]
-        proc_work = subprocess.Popen(
-            [resolved, f"--user-data-dir={profile_work}", *common_flags, *urls],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        time.sleep(2.5)
-        work_metrics, work_cpu = measure_cpu_and_memory(proc_work.pid, workload_window_sec)
-        proc_work.terminate()
-        try:
-            proc_work.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc_work.kill()
-
-        return BenchmarkRunResult(
-            label=label,
-            binary=resolved,
-            startup_ms=startup_ms,
-            idle_cpu_percent=idle_cpu,
-            idle_rss_mb=round(idle_metrics.rss_kb / 1024.0, 2),
-            idle_pss_mb=round(idle_metrics.pss_kb / 1024.0, 2),
-            idle_uss_mb=round(idle_metrics.uss_kb / 1024.0, 2),
-            workload_rss_mb=round(work_metrics.rss_kb / 1024.0, 2),
-            workload_pss_mb=round(work_metrics.pss_kb / 1024.0, 2),
-            workload_cpu_percent=work_cpu,
-            process_count_idle=idle_metrics.process_count,
-            process_count_workload=work_metrics.process_count,
-        )
+        runs = [
+            _single_run(resolved, common_flags, port, idle_window_sec, workload_window_sec, low_priority)
+            for _ in range(max(1, iterations))
+        ]
     finally:
         server.shutdown()
         server.server_close()
-        shutil.rmtree(profile_idle, ignore_errors=True)
-        shutil.rmtree(profile_work, ignore_errors=True)
+
+    med = lambda key: statistics.median(r[key] for r in runs)  # noqa: E731
+    return BenchmarkRunResult(
+        label=label,
+        binary=resolved,
+        startup_ms=round(med("startup_ms"), 1),
+        idle_cpu_percent=round(med("idle_cpu_percent"), 2),
+        idle_rss_mb=round(med("idle_rss_mb"), 2),
+        idle_pss_mb=round(med("idle_pss_mb"), 2),
+        idle_uss_mb=round(med("idle_uss_mb"), 2),
+        workload_rss_mb=round(med("workload_rss_mb"), 2),
+        workload_pss_mb=round(med("workload_pss_mb"), 2),
+        workload_cpu_percent=round(med("workload_cpu_percent"), 2),
+        process_count_idle=int(med("process_count_idle")),
+        process_count_workload=int(med("process_count_workload")),
+        ntp_pss_mb=round(med("ntp_pss_mb"), 2),
+        ntp_rss_mb=round(med("ntp_rss_mb"), 2),
+        iterations=len(runs),
+        extensions=tuple(extensions),
+    )
 
 
 def write_comparison_report(
@@ -273,6 +385,7 @@ def write_comparison_report(
     delta_idle_pss_mb = round(oxygen.idle_pss_mb - baseline.idle_pss_mb, 2)
     delta_work_pss_mb = round(oxygen.workload_pss_mb - baseline.workload_pss_mb, 2)
     delta_idle_cpu = round(oxygen.idle_cpu_percent - baseline.idle_cpu_percent, 2)
+    delta_ntp_pss_mb = round(oxygen.ntp_pss_mb - baseline.ntp_pss_mb, 2)
     within_budget = delta_idle_pss_mb <= 20.0
 
     payload = {
@@ -284,6 +397,7 @@ def write_comparison_report(
             "idle_pss_mb": delta_idle_pss_mb,
             "workload_pss_mb": delta_work_pss_mb,
             "idle_cpu_percent": delta_idle_cpu,
+            "ntp_pss_mb": delta_ntp_pss_mb,
             "startup_ms": round(oxygen.startup_ms - baseline.startup_ms, 1),
             "within_20mb_budget": within_budget,
         },
@@ -295,42 +409,64 @@ def write_comparison_report(
 
     md = f"""# Oxygen vs Helium Benchmark Report ({ts})
 
+Median of {oxygen.iterations} run(s) per browser; headless, nice 19 / ionice idle, warm throwaway profiles.
+
 | Metric | {baseline.label} | {oxygen.label} | Delta |
 | --- | ---: | ---: | ---: |
 | Startup (ms) | {baseline.startup_ms} | {oxygen.startup_ms} | {payload['delta']['startup_ms']:+.1f} |
 | Idle PSS (MB) | {baseline.idle_pss_mb} | {oxygen.idle_pss_mb} | {delta_idle_pss_mb:+.2f} |
 | Idle RSS (MB) | {baseline.idle_rss_mb} | {oxygen.idle_rss_mb} | {oxygen.idle_rss_mb - baseline.idle_rss_mb:+.2f} |
 | Idle CPU (%) | {baseline.idle_cpu_percent} | {oxygen.idle_cpu_percent} | {delta_idle_cpu:+.2f} |
+| New Tab PSS (MB) | {baseline.ntp_pss_mb} | {oxygen.ntp_pss_mb} | {delta_ntp_pss_mb:+.2f} |
+| New Tab RSS (MB) | {baseline.ntp_rss_mb} | {oxygen.ntp_rss_mb} | {oxygen.ntp_rss_mb - baseline.ntp_rss_mb:+.2f} |
 | 5-Tab PSS (MB) | {baseline.workload_pss_mb} | {oxygen.workload_pss_mb} | {delta_work_pss_mb:+.2f} |
 | 5-Tab CPU (%) | {baseline.workload_cpu_percent} | {oxygen.workload_cpu_percent} | {oxygen.workload_cpu_percent - baseline.workload_cpu_percent:+.2f} |
 
-**20 MB Incremental Memory Budget:** {"PASS" if within_budget else "FAIL"}
+**20 MB Incremental Memory Budget (idle PSS delta):** {"PASS" if within_budget else "FAIL"}
 """
     md_path.write_text(md, encoding="utf-8")
     return json_path, md_path
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Oxygen Browser RAM & CPU Benchmark Suite")
+    parser = argparse.ArgumentParser(description="Oxygen RAM & CPU Benchmark Suite")
     parser.add_argument("--binary", help="Single browser binary to benchmark")
     parser.add_argument("--helium", help="Baseline Helium binary path")
-    parser.add_argument("--oxygen", help="Oxygen binary path")
+    parser.add_argument(
+        "--extension",
+        action="append",
+        default=[],
+        help="Unpacked extension dir loaded for the Oxygen run (repeatable, e.g. extension + theme pack)",
+    )
+    parser.add_argument("--oxygen", help="Legacy: separate Oxygen browser binary (fork builds)")
+    parser.add_argument("--iterations", type=int, default=3, help="Runs per browser (median reported)")
     parser.add_argument("--window", type=float, default=4.0, help="Sampling window in seconds")
     parser.add_argument("--headed", action="store_true", help="Run without --headless=new")
+    parser.add_argument("--normal-priority", action="store_true", help="Do not wrap in nice/ionice")
     args = parser.parse_args()
 
     headless = not args.headed
+    low = not args.normal_priority
+    common = dict(headless=headless, iterations=args.iterations, low_priority=low)
 
-    if args.helium and args.oxygen:
-        base_res = benchmark_binary("Helium", args.helium, args.window, args.window, headless)
-        ox_res = benchmark_binary("Oxygen", args.oxygen, args.window, args.window, headless)
+    if args.helium and (args.extension or args.oxygen):
+        base_res = benchmark_binary("Helium", args.helium, args.window, args.window, **common)
+        if args.extension:
+            ox_res = benchmark_binary(
+                "Helium + Oxygen", args.helium, args.window, args.window,
+                extensions=args.extension, **common,
+            )
+        else:
+            ox_res = benchmark_binary("Oxygen", args.oxygen, args.window, args.window, **common)
         json_path, md_path = write_comparison_report(base_res, ox_res)
         print(md_path.read_text(encoding="utf-8"))
         print(f"Saved JSON: {json_path}")
         return 0
 
     if args.binary:
-        res = benchmark_binary("Browser", args.binary, args.window, args.window, headless)
+        res = benchmark_binary(
+            "Browser", args.binary, args.window, args.window, extensions=args.extension, **common
+        )
         print(json.dumps(asdict(res), indent=2))
         return 0
 
