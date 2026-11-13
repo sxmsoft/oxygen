@@ -47,14 +47,14 @@ the browser language unless you pick one under *Advanced → Language*.
 | `storage`, `unlimitedStorage` | Config, notes, layouts and workspaces; wallpapers stored in IndexedDB |
 | `management` | Switching theme packs |
 | `tabs`, `tabGroups` | Suspender, workspaces, palette tab search, side panel tab list |
-| `sessions` | Restoring recently closed tabs and windows |
+| `sessions` | Recent widget: lists and restores recently closed tabs/windows |
 | `history`, `bookmarks` | Palette search and the Recent widget (results stay local) |
 | `favicon` | Favicons through `_favicon/` with no network requests |
 | `sidePanel` | Side panel |
 | `scripting` + host `<all_urls>` | Palette overlay, forced dark and custom CSS on websites |
 | `alarms` | One-shot idle timer per tab for the suspender (no polling) |
 | `webNavigation` | Applying site rules on navigation |
-| `search` | Running palette and search widget queries with the default search engine |
+| `search` | Search widget queries go to the default search engine |
 
 The weather widget is the only part that uses the network (`api.open-meteo.com`,
 `geocoding-api.open-meteo.com`), and only while it is on the page.
