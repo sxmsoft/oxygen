@@ -1,105 +1,129 @@
 #!/usr/bin/env bash
+# Oxygen CLI — Oxygen runs as an MV3 extension on top of stock Helium.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-UPSTREAM_LINUX="${ROOT_DIR}/upstream/helium-linux"
-# Low-priority, resource-capped container runtime (see scripts/lowprio/docker)
-export PATH="${ROOT_DIR}/scripts/lowprio:${PATH}"
-OXYGEN_JOBS="${OXYGEN_JOBS:-4}"
+DIST="${ROOT_DIR}/dist"
+KEYS_DIR="${OXYGEN_KEYS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/oxygen-keys}"
+LOWPRIO=(nice -n 19 ionice -c3)
+VARIANTS=(obsidian graphite midnight)
+
+helium_bin() {
+  if [[ -n "${HELIUM_BIN:-}" ]]; then echo "${HELIUM_BIN}"; return; fi
+  # Real binary (not the wrapper) for headless/packaging so user flags don't apply.
+  if [[ -x /opt/helium-browser-bin/helium ]]; then echo /opt/helium-browser-bin/helium; return; fi
+  command -v helium-browser || command -v helium || { echo "Helium not found; set HELIUM_BIN" >&2; exit 1; }
+}
 
 usage() {
-  cat <<EOF
-Oxygen Browser Alpha 0.1 CLI
+  cat <<USAGE
+Oxygen CLI (Helium extension edition)
 
 Usage: ./scripts/oxygen.sh <command> [options]
 
 Commands:
-  status            Show pinned Helium upstream revisions and verify Oxygen patches
-  sync [args]       Sync upstream Helium revisions (supports --dry-run)
-  branding [img]    Regenerate Oxygen PNG/SVG/.icon assets from logo image
-  build-ui          Typecheck and build the Svelte Control Center (oxygen://settings)
-  test              Run all Oxygen Core, SDK, Control Center, patch, and benchmark tests
-  prepare [--low-ram]
-                    Build UI + fetch Chromium/Helium sources, apply Helium & Oxygen patches
-  build [--low-ram] Compile Oxygen Browser inside the Debian Docker/Podman builder
-  run               Launch compiled Oxygen binary with isolated dev profile
-  benchmark <helium_bin> <oxygen_bin>
-                    Run RAM/CPU/startup comparison benchmark (Helium vs Oxygen)
-EOF
-}
-
-cmd_build_ui() {
-  echo "==> Building Svelte Control Center (oxygen://settings)..."
-  (cd "${ROOT_DIR}/control-center" && npm run check && npm run build)
-}
-
-cmd_test() {
-  echo "==> Verifying upstream & Oxygen patch series..."
-  python3 "${ROOT_DIR}/scripts/sync_upstream.py" verify-patches
-
-  echo "==> Building & testing Oxygen Core + SDK + Obsidian Theme Module..."
-  (cd "${ROOT_DIR}/oxygen-core" && npm run build && npm test)
-
-  echo "==> Typechecking & building Svelte Control Center..."
-  cmd_build_ui
-
-  echo "==> Running benchmark infrastructure tests..."
-  (cd "${ROOT_DIR}" && python3 -m unittest discover -s benchmarks/tests -v)
-
-  echo "All Oxygen Browser Alpha 0.1 verification checks passed."
-}
-
-cmd_prepare() {
-  local low_ram_flag=""
-  if [[ "${1:-}" == "--low-ram" ]]; then
-    low_ram_flag="--low-ram"
-  fi
-
-  cmd_build_ui
-
-  echo "==> Running Helium upstream fetch & patch preparation inside container..."
-  _prepare_only=1 bash "${UPSTREAM_LINUX}/scripts/docker-build.sh"
-
-  echo "==> Applying Oxygen native components, Control Center, branding, and patches..."
-  python3 "${ROOT_DIR}/scripts/prepare_source.py" ${low_ram_flag}
-  python3 "${ROOT_DIR}/scripts/oxygen_name_sub.py" -t "${UPSTREAM_LINUX}/build/src"
+  build             Build oxygen-core, the extension (dist/extension) and theme packs (dist/themes)
+  test              Core unit tests, Control Center typecheck, benchmark tests
+  verify            Headless end-to-end check on Helium (throwaway profile, screenshots in dist/e2e)
+  run [--theme T]   Start Helium + Oxygen with dev profile ~/.config/oxygen-dev (T: obsidian|graphite|midnight|none)
+  package           Zip + signed .crx for the extension and theme packs into dist/packages
+                    (keys in ${KEYS_DIR}, never in the repo)
+  benchmark [N]     Bare Helium vs Helium + Oxygen, N iterations (default 3), headless, low priority
+  branding [img]    Regenerate branding PNG/SVG assets from the logo image
+USAGE
 }
 
 cmd_build() {
-  local low_ram_flag=""
-  if [[ "${1:-}" == "--low-ram" ]]; then
-    low_ram_flag="--low-ram"
-  fi
+  echo "==> oxygen-core (tsc)"
+  (cd "${ROOT_DIR}/oxygen-core" && "${LOWPRIO[@]}" npm run --silent build)
+  echo "==> Control Center + service worker -> dist/extension"
+  (cd "${ROOT_DIR}/control-center" && "${LOWPRIO[@]}" npm run --silent build:extension)
+  echo "==> Theme packs -> dist/themes"
+  "${LOWPRIO[@]}" node "${ROOT_DIR}/scripts/build_themes.mjs" "${DIST}/themes"
+}
 
-  cmd_prepare ${low_ram_flag}
+cmd_test() {
+  echo "==> Oxygen Core + SDK + Obsidian module tests"
+  (cd "${ROOT_DIR}/oxygen-core" && npm run --silent build && npm test)
+  echo "==> Control Center typecheck"
+  (cd "${ROOT_DIR}/control-center" && npm run --silent check)
+  echo "==> Benchmark infrastructure tests"
+  (cd "${ROOT_DIR}" && python3 -m unittest discover -s benchmarks/tests -v)
+  echo "All Oxygen checks passed."
+}
 
-  echo "==> Compiling Oxygen Browser (target: chrome)..."
-  docker run --rm -i \
-    -u "$(id -u):$(id -g)" \
-    -v "${UPSTREAM_LINUX}:/repo" \
-    -e OXYGEN_JOBS="${OXYGEN_JOBS}" \
-    chromium-builder:trixie-slim \
-    bash -lc '
-      cd /repo/build/src &&
-      ./buildtools/linux64/gn gen out/Default --fail-on-unused-args &&
-      ./third_party/depot_tools/autoninja.py -j "${OXYGEN_JOBS}" -C out/Default chrome
-    '
+cmd_verify() {
+  cmd_build
+  "${LOWPRIO[@]}" node "${ROOT_DIR}/tests/e2e/verify_extension.mjs" --binary "$(helium_bin)" "$@"
 }
 
 cmd_run() {
-  local bin="${UPSTREAM_LINUX}/build/src/out/Default/oxygen"
-  if [[ ! -x "${bin}" ]]; then
-    echo "Oxygen binary not found at ${bin}. Run './scripts/oxygen.sh build' first." >&2
-    exit 1
+  [[ -f "${DIST}/extension/manifest.json" ]] || cmd_build
+  OXYGEN_PROFILE="${OXYGEN_PROFILE:-${XDG_CONFIG_HOME:-$HOME/.config}/oxygen-dev}" \
+    exec "${ROOT_DIR}/scripts/oxygen-launch.sh" "$@"
+}
+
+# Signs one unpacked dir into a .crx using an isolated throwaway profile.
+pack_crx() {
+  local dir="$1" key="$2" out="$3" tmp
+  if [[ ! -f "${key}" ]]; then
+    mkdir -p "${KEYS_DIR}" && chmod 700 "${KEYS_DIR}"
+    (umask 077 && openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "${key}" 2>/dev/null)
+    echo "    generated new key ${key} (ID will differ from manifest key)" >&2
   fi
-  exec "${bin}" \
-    --user-data-dir="${HOME}/.config/org.oxygenbrowser.oxygen.dev" \
-    "oxygen://settings" "$@"
+  tmp="$(mktemp -d /tmp/oxygen-pack-XXXXXX)"
+  cp -r "${dir}" "${tmp}/pkg"
+  "${LOWPRIO[@]}" "$(helium_bin)" --headless=new --user-data-dir="${tmp}/profile" \
+    --pack-extension="${tmp}/pkg" --pack-extension-key="${key}" >/dev/null 2>&1 || true
+  [[ -f "${tmp}/pkg.crx" ]] || { rm -rf "${tmp}"; echo "crx packing failed for ${dir}" >&2; return 1; }
+  mv "${tmp}/pkg.crx" "${out}" && chmod 644 "${out}"
+  rm -rf "${tmp}"
+}
+
+zip_dir() {
+  python3 - "$1" "$2" <<'PY'
+import sys, zipfile, pathlib
+src, out = pathlib.Path(sys.argv[1]), sys.argv[2]
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+    for f in sorted(src.rglob("*")):
+        if f.is_file():
+            z.write(f, f.relative_to(src))
+PY
+}
+
+cmd_package() {
+  cmd_build
+  local ver out
+  ver="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["version"])' "${DIST}/extension/manifest.json")"
+  out="${DIST}/packages"
+  rm -rf "${out}" && mkdir -p "${out}"
+  echo "==> oxygen-${ver}"
+  zip_dir "${DIST}/extension" "${out}/oxygen-${ver}.zip"
+  pack_crx "${DIST}/extension" "${KEYS_DIR}/oxygen.pem" "${out}/oxygen-${ver}.crx"
+  for v in "${VARIANTS[@]}"; do
+    echo "==> oxygen-theme-${v}-${ver}"
+    zip_dir "${DIST}/themes/${v}" "${out}/oxygen-theme-${v}-${ver}.zip"
+    pack_crx "${DIST}/themes/${v}" "${KEYS_DIR}/theme-${v}.pem" "${out}/oxygen-theme-${v}-${ver}.crx"
+  done
+  ls -l "${out}"
+}
+
+cmd_benchmark() {
+  local n="${1:-3}"
+  [[ -f "${DIST}/extension/manifest.json" ]] || cmd_build
+  "${LOWPRIO[@]}" python3 "${ROOT_DIR}/benchmarks/benchmark_browser.py" \
+    --helium "$(helium_bin)" \
+    --extension "${DIST}/extension" --extension "${DIST}/themes/obsidian" \
+    --iterations "${n}"
 }
 
 case "${1:-}" in
-  status) shift; python3 "${ROOT_DIR}/scripts/sync_upstream.py" status "$@";;
-  sync) shift; python3 "${ROOT_DIR}/scripts/sync_upstream.py" sync "$@";;
+  build) cmd_build;;
+  test) cmd_test;;
+  verify) shift; cmd_verify "$@";;
+  run) shift; cmd_run "$@";;
+  package) cmd_package;;
+  benchmark) shift; cmd_benchmark "$@";;
   branding)
     shift
     if [[ -n "${1:-}" ]]; then
@@ -107,19 +131,6 @@ case "${1:-}" in
     else
       python3 "${ROOT_DIR}/scripts/build_branding_assets.py"
     fi
-    ;;
-  build-ui) cmd_build_ui;;
-  test) cmd_test;;
-  prepare) shift; cmd_prepare "$@";;
-  build) shift; cmd_build "$@";;
-  run) shift; cmd_run "$@";;
-  benchmark)
-    shift
-    if [[ $# -lt 2 ]]; then
-      echo "Usage: ./scripts/oxygen.sh benchmark <helium_binary> <oxygen_binary>" >&2
-      exit 1
-    fi
-    python3 "${ROOT_DIR}/benchmarks/benchmark_browser.py" --helium "$1" --oxygen "$2"
     ;;
   *) usage; exit 1;;
 esac
