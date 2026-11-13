@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { launchBrowser, closeBrowser, sleep } from './cdp.mjs';
+import { launchBrowser, closeBrowser, sleep, stageExtension } from './cdp.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
@@ -19,7 +19,7 @@ const binary = opt('--binary', process.env.HELIUM_BIN ?? '/opt/helium-browser-bi
 const shots = resolve(opt('--shots', join(repo, 'dist/e2e')));
 mkdirSync(shots, { recursive: true });
 
-const extDir = join(repo, 'dist/extension');
+const extDir = stageExtension(join(repo, 'dist/extension'));
 // Chromium reliably keeps a single theme installed, so (like the launcher)
 // each run loads exactly one theme pack.
 const pack = (v) => join(repo, 'dist/themes', v);

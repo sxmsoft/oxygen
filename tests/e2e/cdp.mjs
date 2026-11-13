@@ -1,6 +1,7 @@
 // Tiny Chrome DevTools Protocol helper (Node >= 22, built-in WebSocket).
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -121,6 +122,18 @@ export class CDP {
     const { data } = await this.send('Page.captureScreenshot', { format: 'png' }, sessionId);
     return Buffer.from(data, 'base64');
   }
+}
+
+/**
+ * Copies an unpacked extension to a temp dir without the personal Helium
+ * shortcut import, so tests never see (or screenshot) the user's own links.
+ * The manifest key keeps the extension id identical.
+ */
+export function stageExtension(srcDir) {
+  const dir = join(mkdtempSync(join(tmpdir(), 'oxygen-e2e-ext-')), 'extension');
+  cpSync(srcDir, dir, { recursive: true });
+  rmSync(join(dir, 'imported-shortcuts.json'), { force: true });
+  return dir;
 }
 
 export { sleep };

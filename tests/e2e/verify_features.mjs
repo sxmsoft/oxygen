@@ -11,7 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { launchBrowser, closeBrowser, sleep } from './cdp.mjs';
+import { launchBrowser, closeBrowser, sleep, stageExtension } from './cdp.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
@@ -22,7 +22,7 @@ const opt = (name, def) => {
 const binary = opt('--binary', process.env.HELIUM_BIN ?? '/opt/helium-browser-bin/helium');
 const shots = resolve(opt('--shots', join(repo, 'dist/e2e')));
 mkdirSync(shots, { recursive: true });
-const extDir = join(repo, 'dist/extension');
+const extDir = stageExtension(join(repo, 'dist/extension'));
 const profile = mkdtempSync(join(tmpdir(), 'oxygen-e2e-features-'));
 const media = mkdtempSync(join(tmpdir(), 'oxygen-e2e-media-'));
 
