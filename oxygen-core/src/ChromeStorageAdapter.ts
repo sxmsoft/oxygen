@@ -38,6 +38,15 @@ export function isConfigBundle(value: unknown): value is OxygenConfigBundle {
   );
 }
 
+/** JSON with object keys sorted, so equal bundles compare equal regardless of key order. */
+export function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, (v as Record<string, unknown>)[k]]))
+      : v
+  );
+}
+
 /**
  * ConfigStorageAdapter backed by `chrome.storage` (replaces the native
  * `oxygen.*` PrefService prefs of the Chromium fork).
@@ -45,8 +54,8 @@ export function isConfigBundle(value: unknown): value is OxygenConfigBundle {
  * ConfigEngine needs synchronous reads, while chrome.storage is async, so the
  * adapter is created with `await ChromeStorageAdapter.create(area)`, which
  * preloads the bundle. Writes update the cache immediately and are flushed to
- * storage in order. Identical bundles are never re-written, which also breaks
- * echo loops between tabs.
+ * storage in order. Bundles equal up to key order are never re-written, which
+ * also breaks echo loops between tabs.
  */
 export class ChromeStorageAdapter implements ConfigStorageAdapter {
   private cache: OxygenConfigBundle | null;
@@ -60,7 +69,7 @@ export class ChromeStorageAdapter implements ConfigStorageAdapter {
     initial: OxygenConfigBundle | null
   ) {
     this.cache = initial ? structuredClone(initial) : null;
-    this.lastSerialized = initial ? JSON.stringify(initial) : null;
+    this.lastSerialized = initial ? canonicalJson(initial) : null;
   }
 
   static async create(
@@ -77,7 +86,7 @@ export class ChromeStorageAdapter implements ConfigStorageAdapter {
   }
 
   write(bundle: OxygenConfigBundle): void {
-    const serialized = JSON.stringify(bundle);
+    const serialized = canonicalJson(bundle);
     if (serialized === this.lastSerialized) return;
     this.cache = structuredClone(bundle);
     this.lastSerialized = serialized;
@@ -105,7 +114,7 @@ export class ChromeStorageAdapter implements ConfigStorageAdapter {
    */
   acceptExternal(value: unknown): OxygenConfigBundle | null {
     if (!isConfigBundle(value)) return null;
-    const serialized = JSON.stringify(value);
+    const serialized = canonicalJson(value);
     if (serialized === this.lastSerialized) return null;
     this.cache = structuredClone(value);
     this.lastSerialized = serialized;

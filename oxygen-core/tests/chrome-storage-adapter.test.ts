@@ -87,6 +87,19 @@ test('identical bundles are not re-written', async () => {
   assert.equal(area.setCalls, before);
 });
 
+test('key order does not cause re-writes (no echo between tabs)', async () => {
+  const area = new FakeChromeStorage();
+  const { adapter } = await openCore(area);
+  await adapter.flush();
+  const before = area.setCalls;
+  const b = adapter.read()!;
+  const reordered = Object.fromEntries(Object.entries(b).reverse()) as typeof b;
+  assert.equal(adapter.acceptExternal(reordered), null);
+  adapter.write(reordered);
+  await adapter.flush();
+  assert.equal(area.setCalls, before);
+});
+
 test('malformed stored value is ignored and replaced with defaults', async () => {
   const area = new FakeChromeStorage();
   area.data[OXYGEN_CONFIG_STORAGE_KEY] = { nope: true };
@@ -132,4 +145,29 @@ test('two tabs stay in sync through storage.onChanged without echo loops', async
   const callsBefore = area.setCalls;
   await settle();
   assert.equal(area.setCalls, callsBefore, 'no further writes after sync settles');
+});
+
+test('default-enabled modules all start on; explicit disable survives restart', async () => {
+  const area = new FakeChromeStorage();
+  const open = async () => {
+    const adapter = await ChromeStorageAdapter.create(area);
+    const core = new OxygenCore({ storage: adapter });
+    core.registerModule(obsidianThemeManifest, createObsidianThemeModule, true);
+    core.registerModule(
+      { ...obsidianThemeManifest, id: 'core-perf-guard', name: 'Perf', configSchema: {} },
+      () => ({ onEnable() {} }),
+      true
+    );
+    await core.init();
+    return { adapter, core };
+  };
+  const first = await open();
+  assert.equal(first.core.modules.getActiveCount(), 2);
+  await first.core.modules.disableModule('core-theme-obsidian');
+  await first.adapter.flush();
+
+  const second = await open();
+  assert.equal(second.core.modules.getActiveCount(), 1);
+  const stored = area.data[OXYGEN_CONFIG_STORAGE_KEY] as { disabledModuleIds: string[] };
+  assert.deepEqual(stored.disabledModuleIds, ['core-theme-obsidian']);
 });

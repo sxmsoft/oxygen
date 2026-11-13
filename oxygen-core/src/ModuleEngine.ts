@@ -16,6 +16,7 @@ export interface RegisteredModule {
   manifest: OxygenModuleManifest;
   loader: ModuleLoader;
   enabled: boolean;
+  defaultEnabled: boolean;
   instance: OxygenModuleInstance | null;
   cleanups: Array<() => void>;
 }
@@ -52,9 +53,11 @@ export class ModuleEngine {
     }
 
     this.config.registerModuleSchema(manifest.id, manifest.configSchema);
+    // Default-enabled modules start on unless the user explicitly disabled them.
     const persisted = this.config.getEnabledModuleIds();
+    const explicitlyDisabled = this.config.getDisabledModuleIds().includes(manifest.id);
     const shouldEnable =
-      persisted.includes(manifest.id) || (persisted.length === 0 && defaultEnabled);
+      persisted.includes(manifest.id) || (defaultEnabled && !explicitlyDisabled);
     if (shouldEnable && !persisted.includes(manifest.id)) {
       this.config.setModuleEnabled(manifest.id, true);
     }
@@ -63,6 +66,7 @@ export class ModuleEngine {
       manifest,
       loader,
       enabled: shouldEnable,
+      defaultEnabled,
       instance: null,
       cleanups: [],
     });
@@ -86,8 +90,10 @@ export class ModuleEngine {
    */
   async syncWithConfig(): Promise<void> {
     const persisted = new Set(this.config.getEnabledModuleIds());
+    const disabled = new Set(this.config.getDisabledModuleIds());
     for (const [id, entry] of this.registry.entries()) {
-      const wanted = persisted.has(id);
+      // Same rule as register(): a module nobody decided on keeps its default.
+      const wanted = persisted.has(id) || (entry.defaultEnabled && !disabled.has(id));
       if (!wanted) {
         if (entry.enabled || entry.instance) await this.disableModule(id);
         continue;

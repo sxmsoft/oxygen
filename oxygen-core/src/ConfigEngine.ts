@@ -11,6 +11,8 @@ export interface OxygenConfigBundle {
   global: Record<string, unknown>;
   modules: Record<string, Record<string, unknown>>;
   enabledModuleIds: string[];
+  /** Modules the user explicitly turned off (default-enabled modules stay off). */
+  disabledModuleIds?: string[];
 }
 
 export type MigrationFn = (bundle: OxygenConfigBundle) => OxygenConfigBundle;
@@ -32,6 +34,20 @@ export class MemoryConfigStorage implements ConfigStorageAdapter {
 
 export const CURRENT_CONFIG_SCHEMA_VERSION = 1;
 
+export function createDefaultBundle(profileId = 'default'): OxygenConfigBundle {
+  return {
+    schemaVersion: CURRENT_CONFIG_SCHEMA_VERSION,
+    profileId,
+    global: {
+      telemetryEnabled: false,
+      lazyInitModules: true,
+      upstreamChannel: 'helium-stable',
+    },
+    modules: {},
+    enabledModuleIds: [],
+  };
+}
+
 /**
  * Oxygen Configuration Engine:
  * Manages global settings, per-module configurations, schema validation,
@@ -48,19 +64,7 @@ export class ConfigEngine {
     profileId = 'default'
   ) {
     const existing = storage.read();
-    this.cache = existing
-      ? this.runMigrations(existing)
-      : {
-          schemaVersion: CURRENT_CONFIG_SCHEMA_VERSION,
-          profileId,
-          global: {
-            telemetryEnabled: false,
-            lazyInitModules: true,
-            upstreamChannel: 'helium-stable',
-          },
-          modules: {},
-          enabledModuleIds: [],
-        };
+    this.cache = existing ? this.runMigrations(existing) : createDefaultBundle(profileId);
     this.persist();
   }
 
@@ -135,14 +139,22 @@ export class ConfigEngine {
     return [...this.cache.enabledModuleIds];
   }
 
+  getDisabledModuleIds(): string[] {
+    return [...(this.cache.disabledModuleIds ?? [])];
+  }
+
   setModuleEnabled(moduleId: string, enabled: boolean): void {
-    const set = new Set(this.cache.enabledModuleIds);
+    const on = new Set(this.cache.enabledModuleIds);
+    const off = new Set(this.cache.disabledModuleIds ?? []);
     if (enabled) {
-      set.add(moduleId);
+      on.add(moduleId);
+      off.delete(moduleId);
     } else {
-      set.delete(moduleId);
+      on.delete(moduleId);
+      off.add(moduleId);
     }
-    this.cache.enabledModuleIds = [...set];
+    this.cache.enabledModuleIds = [...on];
+    this.cache.disabledModuleIds = [...off];
     this.persist();
   }
 
@@ -157,11 +169,14 @@ export class ConfigEngine {
     }
     const migrated = this.runMigrations(parsed);
     for (const [moduleId, schema] of this.schemas.entries()) {
-      if (migrated.modules[moduleId]) {
-        const res = validateConfigAgainstSchema(migrated.modules[moduleId], schema);
-        if (!res.valid) {
-          throw new Error(`Invalid imported config for "${moduleId}": ${res.errors.join('; ')}`);
-        }
+      // Keys missing from the imported bundle fall back to schema defaults.
+      migrated.modules[moduleId] = {
+        ...extractSchemaDefaults(schema),
+        ...(migrated.modules[moduleId] ?? {}),
+      };
+      const res = validateConfigAgainstSchema(migrated.modules[moduleId], schema);
+      if (!res.valid) {
+        throw new Error(`Invalid imported config for "${moduleId}": ${res.errors.join('; ')}`);
       }
     }
     this.cache = migrated;
