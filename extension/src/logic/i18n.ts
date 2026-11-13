@@ -148,6 +148,11 @@ const en = {
   'ws.import': 'Import JSON',
   'ws.restoreHint': 'Restoring opens new windows with the saved tabs and groups.',
   'ws.autosaveOff': 'Autosave is off.',
+  'cc.hero': 'Runs on Helium ({browser}) as an extension. Modular customization with zero background polling.',
+  'cc.heap': 'JS heap (this page)',
+  'cc.heapBudget': 'Target budget ≤ {mb} MB',
+  'cc.browserTheme': 'Browser theme',
+  'cc.heliumDefault': 'Helium default',
 };
 
 export type MessageKey = keyof typeof en;
@@ -298,6 +303,11 @@ const tr: Record<MessageKey, string> = {
   'ws.import': 'JSON içe aktar',
   'ws.restoreHint': 'Geri yükleme, kayıtlı sekme ve gruplarla yeni pencereler açar.',
   'ws.autosaveOff': 'Otomatik kayıt kapalı.',
+  'cc.hero': 'Helium üzerinde ({browser}) uzantı olarak çalışır. Arka planda sorgulama döngüsü olmadan modüler özelleştirme.',
+  'cc.heap': 'JS yığını (bu sayfa)',
+  'cc.heapBudget': 'Hedef bütçe ≤ {mb} MB',
+  'cc.browserTheme': 'Tarayıcı teması',
+  'cc.heliumDefault': 'Helium varsayılanı',
 };
 
 /** Turkish labels for module config fields (English falls back to the schema label). */

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Launches Helium headless at lowest CPU/IO priority with an isolated profile. */
-export async function launchBrowser({ binary, profileDir, extensions = [], extraArgs = [] }) {
+export async function launchBrowser({ binary, profileDir, extensions = [], extraArgs = [], env = {} }) {
   const args = [
     '-n', '19', 'ionice', '-c3', binary,
     '--headless=new',
@@ -22,7 +22,7 @@ export async function launchBrowser({ binary, profileDir, extensions = [], extra
   ];
   const portFile = join(profileDir, 'DevToolsActivePort');
   rmSync(portFile, { force: true }); // stale file from a previous run
-  const proc = spawn('nice', args, { stdio: 'ignore', detached: true });
+  const proc = spawn('nice', args, { stdio: 'ignore', detached: true, env: { ...process.env, ...env } });
   for (let i = 0; i < 150 && !existsSync(portFile); i++) await sleep(100);
   if (!existsSync(portFile)) throw new Error('browser did not start (no DevToolsActivePort)');
   const [port, path] = readFileSync(portFile, 'utf8').trim().split('\n');

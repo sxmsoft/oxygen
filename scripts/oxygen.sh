@@ -24,7 +24,8 @@ Usage: ./scripts/oxygen.sh <command> [options]
 Commands:
   build             Build oxygen-core, the extension (dist/extension) and theme packs (dist/themes)
   test              Core unit tests, Control Center typecheck, benchmark tests
-  verify            Headless end-to-end check on Helium (throwaway profile, screenshots in dist/e2e)
+  verify            Headless end-to-end checks on Helium: theme sync + every feature module
+                    (throwaway profiles, local fixture server, screenshots in dist/e2e)
   run [--theme T]   Start Helium + Oxygen with dev profile ~/.config/oxygen-dev (T: obsidian|graphite|midnight|none)
   package           Zip + signed .crx for the extension and theme packs into dist/packages
                     (keys in ${KEYS_DIR}, never in the repo)
@@ -55,6 +56,7 @@ cmd_test() {
 cmd_verify() {
   cmd_build
   "${LOWPRIO[@]}" node "${ROOT_DIR}/tests/e2e/verify_extension.mjs" --binary "$(helium_bin)" "$@"
+  "${LOWPRIO[@]}" node "${ROOT_DIR}/tests/e2e/verify_features.mjs" --binary "$(helium_bin)" "$@"
 }
 
 cmd_run() {

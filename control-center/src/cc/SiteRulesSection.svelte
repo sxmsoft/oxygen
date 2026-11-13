@@ -35,7 +35,7 @@
   const currentDark = $derived(currentUrl ? matchRules(rules, currentUrl).forceDark : false);
 </script>
 
-<section class="panel-stack" data-testid="cc-sites">
+<section class="panel-stack cc-sec" data-testid="cc-sites">
   {#if !enabled}<article class="card"><p class="subtitle">{t('common.moduleOff')}</p></article>{/if}
   {#if currentHost}
     <article class="card quick">

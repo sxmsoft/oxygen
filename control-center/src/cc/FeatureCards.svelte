@@ -19,14 +19,14 @@
 </script>
 
 {#if suspenderOn}
-  <article class="card stat" data-testid="suspender-stats">
+  <article class="card cc stat" data-testid="suspender-stats">
     <span class="label">{t('suspender.title')}</span>
     <strong>{stats?.discardedNow ?? 0} · ≈{stats?.estimatedMb ?? 0} MB</strong>
     <span class="hint">{t('suspender.estimate', { mb: stats?.estimatedMb ?? 0, n: stats?.discardedNow ?? 0, per: stats?.mbPerTab ?? 50 })}</span>
     <span class="hint">{t('suspender.total')}: {stats?.totalSuspended ?? 0}. {t('suspender.note')}</span>
   </article>
 {/if}
-<article class="card stat" data-testid="shortcuts">
+<article class="card cc stat" data-testid="shortcuts">
   <span class="label">{t('cc.shortcuts')}</span>
   {#each commands.filter((c) => c.name && !c.name.startsWith('_')) as c}
     <span class="row"><kbd>{c.shortcut || t('cc.notSet')}</kbd> {c.description}</span>

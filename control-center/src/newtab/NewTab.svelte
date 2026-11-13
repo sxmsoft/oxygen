@@ -141,8 +141,15 @@
     <div class="brand"><img src={logoSvg} alt="" width="22" height="22" /><span>Oxygen</span></div>
     <div class="actions">
       {#if widgetsOn || wallpaperOn}
-        <button class="ox-btn ghost" data-testid="customize" onclick={() => { editing = !editing; drawer = editing; settingsFor = null; }}>
-          {editing ? t('common.done') : t('nt.customize')}
+        <button class="ox-btn ghost" data-testid="customize" onclick={() => {
+          if (editing && !drawer) drawer = true;
+          else {
+            editing = !editing;
+            drawer = editing;
+            settingsFor = null;
+          }
+        }}>
+          {editing && drawer ? t('common.done') : t('nt.customize')}
         </button>
       {/if}
       <a class="ox-btn ghost" href="index.html#dashboard">{t('common.settings')}</a>
@@ -157,6 +164,7 @@
       {/if}
       {#each shown as w (w.id)}
         {@const def = widgetDef(w.type)}
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex (focusable only in edit mode: arrow keys move, Shift+arrows resize) -->
         <div
           class="widget ox-glass type-{w.type}"
           class:dragging={drag?.id === w.id && drag.mode === 'move'}

@@ -6,6 +6,7 @@
 import { OXYGEN_CONFIG_STORAGE_KEY } from '../../../oxygen-core/src/ChromeStorageAdapter.js';
 import type { OxygenConfigBundle } from '../../../oxygen-core/src/ConfigEngine.js';
 import { STORAGE_KEYS } from '../modules/manifests.js';
+import { suspendDecision, type SuspenderConfig } from '../logic/suspender.js';
 import { featureConfig, featureEnabled } from '../features/state.js';
 import {
   SUSPEND_ALARM_PREFIX, onSuspendAlarm, reconcileSuspender, scheduleTab, suspenderStats,
@@ -71,6 +72,7 @@ chrome.webNavigation.onCommitted.addListener((d) => {
 });
 
 // ---------- Command palette & side panel ----------
+let lastPaletteError = '';
 async function openPaletteFor(tab: chrome.tabs.Tab | undefined): Promise<string> {
   if (!(await featureEnabled('command-palette')) || !tab?.id) return 'disabled';
   const url = tab.url ?? '';
@@ -83,8 +85,9 @@ async function openPaletteFor(tab: chrome.tabs.Tab | undefined): Promise<string>
     try {
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/palette.js'] });
       return 'content';
-    } catch {
-      /* e.g. the Web Store or a PDF: fall back to the popup */
+    } catch (e) {
+      // e.g. the Web Store or a PDF: fall back to the popup
+      lastPaletteError = String((e as Error)?.message ?? e);
     }
   }
   await chrome.windows.create({
@@ -182,4 +185,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
   runCommand,
   openPaletteFor: async (tabId: number) => openPaletteFor(await chrome.tabs.get(tabId)),
   commands: () => chrome.commands.getAll(),
+  lastPaletteError: () => lastPaletteError,
+  explainSuspend: async (now = Date.now()) => {
+    const cfg = await featureConfig<SuspenderConfig>('tab-suspender');
+    return (await chrome.tabs.query({})).map((t) => ({ id: t.id, url: t.url, status: t.status, ...suspendDecision(t, cfg, now) }));
+  },
 };

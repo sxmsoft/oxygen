@@ -59,7 +59,8 @@ export async function scheduleTab(tab: chrome.tabs.Tab, now = Date.now()): Promi
   const name = SUSPEND_ALARM_PREFIX + tab.id;
   const cfg = await featureConfig<SuspenderConfig>(MODULE);
   const d = suspendDecision(
-    { ...tab, audible: tab.audible, lastAccessed: tab.lastAccessed },
+    // Only committed URLs: discarding a tab that never finished its first load would lose its URL.
+    { ...tab, url: tab.url, audible: tab.audible, lastAccessed: tab.lastAccessed },
     cfg,
     now
   );

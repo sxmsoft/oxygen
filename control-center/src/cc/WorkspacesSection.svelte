@@ -46,7 +46,7 @@
   const last = $derived(store.previousSession ?? store.lastSession);
 </script>
 
-<section class="panel-stack" data-testid="cc-workspaces">
+<section class="panel-stack cc-sec" data-testid="cc-workspaces">
   {#if !enabled}<article class="card"><p class="subtitle">{t('common.moduleOff')}</p></article>{/if}
   <article class="card">
     <h2>{t('ws.title')}</h2>

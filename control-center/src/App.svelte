@@ -207,10 +207,7 @@
             <img src={logoSvg} alt="Oxygen Emblem" class="hero-logo" />
             <div>
               <h2>Oxygen Alpha 0.2</h2>
-              <p>
-                Runs on Helium ({runtime?.browser ?? 'Chromium'}) as an extension. Modular customization
-                with zero background polling.
-              </p>
+              <p>{t('cc.hero', { browser: runtime?.browser ?? 'Chromium' })}</p>
             </div>
           </div>
         </article>
@@ -224,14 +221,14 @@
         </article>
 
         <article class="card stat">
-          <span class="label">JS Heap Footprint</span>
+          <span class="label">{t('cc.heap')}</span>
           <strong>{perf?.jsHeapUsedMb ?? 0} MB</strong>
-          <span class="hint">Target budget &le; {perf?.incrementalBudgetMb ?? 20} MB</span>
+          <span class="hint">{t('cc.heapBudget', { mb: perf?.incrementalBudgetMb ?? 20 })}</span>
         </article>
 
         <article class="card stat">
-          <span class="label">Browser Theme</span>
-          <strong>{themeModule?.enabled ? 'Obsidian Metallic' : 'Helium Default'}</strong>
+          <span class="label">{t('cc.browserTheme')}</span>
+          <strong>{themeModule?.enabled ? 'Obsidian Metallic' : t('cc.heliumDefault')}</strong>
           <span class="hint">Accent {themeTokens.accentColor ?? '#D8DEE9'}</span>
         </article>
       </section>
