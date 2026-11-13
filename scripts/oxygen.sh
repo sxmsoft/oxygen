@@ -101,6 +101,13 @@ cmd_install() {
     [[ -f "${DIST}/themes/${theme}/manifest.json" ]] || { echo "no theme pack ${theme} in dist/themes" >&2; exit 2; }
     value+=",${DIST}/themes/${theme}"
   fi
+  # The wrapper escapes `~` with ${line//~/\\~}; bash tilde-expands that pattern, so every
+  # literal "$HOME" in a flags line becomes a literal "~" Chromium can't resolve. Spell
+  # $HOME with a doubled slash ("/home//user"), which the wrapper leaves alone and the
+  # kernel/Chromium resolve to the same directory.
+  if [[ -n "${HOME:-}" && "${HOME}" == /*/* ]]; then
+    value="${value//"${HOME}"/"${HOME%/*}//${HOME##*/}"}"
+  fi
   local line="--load-extension=$(flag_arg "${value}")"
   mkdir -p "$(dirname "${FLAGS_CONF}")"
   if [[ -f "${FLAGS_CONF}" && ! -f "${FLAGS_BAK}" ]]; then
