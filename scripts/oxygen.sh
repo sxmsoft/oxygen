@@ -7,6 +7,12 @@ DIST="${ROOT_DIR}/dist"
 KEYS_DIR="${OXYGEN_KEYS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/oxygen-keys}"
 LOWPRIO=(nice -n 19 ionice -c3)
 VARIANTS=(obsidian graphite midnight)
+XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+IMPORT_FILE="${XDG_DATA_HOME:-$HOME/.local/share}/oxygen/imported-shortcuts.json"
+FLAGS_CONF="${XDG_CONFIG_HOME}/helium-browser-flags.conf"
+FLAGS_BAK="${FLAGS_CONF}.bak-oxygen"
+FLAGS_MARK="# Oxygen extension (added by oxygen.sh install; remove with oxygen.sh uninstall)"
+DESKTOP_OVERRIDE="${XDG_DATA_HOME:-$HOME/.local/share}/applications/helium.desktop"
 
 helium_bin() {
   if [[ -n "${HELIUM_BIN:-}" ]]; then echo "${HELIUM_BIN}"; return; fi
@@ -27,6 +33,14 @@ Commands:
   verify            Headless end-to-end checks on Helium: theme sync + every feature module
                     (throwaway profiles, local fixture server, screenshots in dist/e2e)
   run [--theme T]   Start Helium + Oxygen with dev profile ~/.config/oxygen-dev (T: obsidian|graphite|midnight|none)
+  install [--theme T]
+                    Load Oxygen whenever Helium starts normally (menu, dock, helium-browser):
+                    adds --load-extension=dist/extension to ${FLAGS_CONF}
+                    (backup: ${FLAGS_BAK}). Idempotent. --theme adds a theme pack too (optional).
+  uninstall         Remove exactly what install added (restores the backup when nothing else changed)
+  import-shortcuts [--profile DIR]
+                    Copy Helium's new-tab shortcuts into Oxygen quick links (reads a copy of
+                    <profile>/Preferences; default ~/.config/net.imput.helium/Default)
   package           Zip + signed .crx for the extension and theme packs into dist/packages
                     (keys in ${KEYS_DIR}, never in the repo)
   benchmark [N]     Bare Helium vs Helium + Oxygen, N iterations (default 3), headless, low priority
@@ -41,6 +55,114 @@ cmd_build() {
   (cd "${ROOT_DIR}/control-center" && "${LOWPRIO[@]}" npm run --silent build:extension)
   echo "==> Theme packs -> dist/themes"
   "${LOWPRIO[@]}" node "${ROOT_DIR}/scripts/build_themes.mjs" "${DIST}/themes"
+  # vite empties dist/extension; keep a previous Helium shortcut import in the build.
+  if [[ -f "${IMPORT_FILE}" ]]; then
+    install -m 600 "${IMPORT_FILE}" "${DIST}/extension/imported-shortcuts.json"
+    echo "==> kept Helium shortcut import (${IMPORT_FILE})"
+  fi
+}
+
+cmd_import_shortcuts() {
+  [[ -f "${ROOT_DIR}/oxygen-core/dist/extension/src/logic/shortcuts.js" ]] || (cd "${ROOT_DIR}/oxygen-core" && "${LOWPRIO[@]}" npm run --silent build)
+  "${LOWPRIO[@]}" node "${ROOT_DIR}/scripts/import_shortcuts.mjs" --out "${IMPORT_FILE}" --dist "${DIST}/extension" "$@"
+  echo "Oxygen picks it up on its next start (or Control Center / quick links: \"Import from Helium\")."
+}
+
+# Quotes a flag value for the wrapper's `eval set --` parser only when needed.
+flag_arg() {
+  if [[ "$1" =~ [[:space:]\"\'\\] ]]; then printf '"%s"' "${1//\"/\\\"}"; else printf '%s' "$1"; fi
+}
+
+# Desktop entries must go through the wrapper (it is what reads the flags file).
+desktop_check() {
+  local f bad=()
+  for f in /usr/share/applications/helium*.desktop; do
+    [[ -f "$f" ]] || continue
+    if grep -E '^Exec=' "$f" | grep -vqE '^Exec=(/usr/bin/)?helium-browser( |$)'; then bad+=("$f"); fi
+  done
+  if ((${#bad[@]} == 0)); then
+    echo "    desktop launcher(s) already use helium-browser (the wrapper)"
+    return
+  fi
+  for f in "${bad[@]}"; do
+    mkdir -p "$(dirname "${DESKTOP_OVERRIDE}")"
+    { echo "# Oxygen override (oxygen.sh install): launch through the helium-browser wrapper"
+      sed -E 's#^Exec=[^ ]+#Exec=helium-browser#' "$f"; } > "${DESKTOP_OVERRIDE}"
+    echo "    wrote ${DESKTOP_OVERRIDE} (Exec via helium-browser)"
+  done
+}
+
+cmd_install() {
+  local theme=""
+  while (($#)); do case "$1" in --theme) theme="${2:-}"; shift 2;; *) echo "unknown option $1" >&2; exit 2;; esac; done
+  [[ -f "${DIST}/extension/manifest.json" ]] || cmd_build
+  local value="${DIST}/extension"
+  if [[ -n "${theme}" ]]; then
+    [[ -f "${DIST}/themes/${theme}/manifest.json" ]] || { echo "no theme pack ${theme} in dist/themes" >&2; exit 2; }
+    value+=",${DIST}/themes/${theme}"
+  fi
+  local line="--load-extension=$(flag_arg "${value}")"
+  mkdir -p "$(dirname "${FLAGS_CONF}")"
+  if [[ -f "${FLAGS_CONF}" && ! -f "${FLAGS_BAK}" ]]; then
+    cp -p "${FLAGS_CONF}" "${FLAGS_BAK}"
+    echo "    backup: ${FLAGS_BAK}"
+  fi
+  touch "${FLAGS_CONF}"
+  if grep -Fxq "${FLAGS_MARK}" "${FLAGS_CONF}"; then
+    # Replace our previous line (e.g. theme changed); other lines stay byte-identical.
+    python3 - "${FLAGS_CONF}" "${FLAGS_MARK}" "${line}" <<'PY'
+import sys
+path, mark, line = sys.argv[1:]
+lines = open(path, encoding="utf-8").read().split("\n")
+out, i = [], 0
+while i < len(lines):
+    if lines[i] == mark:
+        out += [mark, line]; i += 2; continue
+    out.append(lines[i]); i += 1
+open(path, "w", encoding="utf-8").write("\n".join(out))
+PY
+  else
+    if grep -Eq '^[[:space:]]*--load-extension' "${FLAGS_CONF}"; then
+      echo "    warning: ${FLAGS_CONF} already has another --load-extension line; Chromium uses only the last one" >&2
+    fi
+    [[ -s "${FLAGS_CONF}" && "$(tail -c1 "${FLAGS_CONF}" | od -An -c | tr -d ' ')" != '\n' ]] && printf '\n' >> "${FLAGS_CONF}"
+    printf '%s\n%s\n' "${FLAGS_MARK}" "${line}" >> "${FLAGS_CONF}"
+  fi
+  echo "==> ${FLAGS_CONF}: ${line}"
+  desktop_check
+  echo "Restart Helium (fully quit it first) to load Oxygen."
+}
+
+cmd_uninstall() {
+  if [[ -f "${FLAGS_CONF}" ]] && grep -Fxq "${FLAGS_MARK}" "${FLAGS_CONF}"; then
+    python3 - "${FLAGS_CONF}" "${FLAGS_MARK}" <<'PY'
+import sys
+path, mark = sys.argv[1:]
+lines = open(path, encoding="utf-8").read().split("\n")
+out, i = [], 0
+while i < len(lines):
+    if lines[i] == mark:
+        i += 2; continue
+    out.append(lines[i]); i += 1
+open(path, "w", encoding="utf-8").write("\n".join(out))
+PY
+    echo "==> removed Oxygen line from ${FLAGS_CONF}"
+  else
+    echo "    ${FLAGS_CONF}: nothing to remove"
+  fi
+  if [[ -f "${FLAGS_BAK}" ]]; then
+    if cmp -s "${FLAGS_BAK}" "${FLAGS_CONF}"; then
+      mv -f "${FLAGS_BAK}" "${FLAGS_CONF}"  # identical: restore (keeps original mtime/mode)
+      echo "    restored ${FLAGS_CONF} from backup"
+    else
+      echo "    ${FLAGS_CONF} differs from ${FLAGS_BAK} (edited since install); kept both" >&2
+    fi
+  fi
+  if [[ -f "${DESKTOP_OVERRIDE}" ]] && head -1 "${DESKTOP_OVERRIDE}" | grep -q '^# Oxygen override'; then
+    rm -f "${DESKTOP_OVERRIDE}"
+    echo "    removed ${DESKTOP_OVERRIDE}"
+  fi
+  echo "Restart Helium to unload Oxygen."
 }
 
 cmd_test() {
@@ -100,8 +222,14 @@ cmd_package() {
   out="${DIST}/packages"
   rm -rf "${out}" && mkdir -p "${out}"
   echo "==> oxygen-${ver}"
-  zip_dir "${DIST}/extension" "${out}/oxygen-${ver}.zip"
-  pack_crx "${DIST}/extension" "${KEYS_DIR}/oxygen.pem" "${out}/oxygen-${ver}.crx"
+  # Never ship the personal shortcut import (URLs can contain share keys).
+  local stage
+  stage="$(mktemp -d /tmp/oxygen-stage-XXXXXX)"
+  cp -r "${DIST}/extension" "${stage}/extension"
+  rm -f "${stage}/extension/imported-shortcuts.json"
+  zip_dir "${stage}/extension" "${out}/oxygen-${ver}.zip"
+  pack_crx "${stage}/extension" "${KEYS_DIR}/oxygen.pem" "${out}/oxygen-${ver}.crx"
+  rm -rf "${stage}"
   for v in "${VARIANTS[@]}"; do
     echo "==> oxygen-theme-${v}-${ver}"
     zip_dir "${DIST}/themes/${v}" "${out}/oxygen-theme-${v}-${ver}.zip"
@@ -125,6 +253,9 @@ case "${1:-}" in
   verify) shift; cmd_verify "$@";;
   run) shift; cmd_run "$@";;
   package) cmd_package;;
+  install) shift; cmd_install "$@";;
+  uninstall) cmd_uninstall;;
+  import-shortcuts) shift; cmd_import_shortcuts "$@";;
   benchmark) shift; cmd_benchmark "$@";;
   branding)
     shift
