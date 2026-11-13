@@ -1,4 +1,4 @@
-/** Grid layout engine for new tab widgets (12 columns, vertical compaction). */
+/** Grid layout engine for new tab widgets (N columns, default 12; vertical compaction). */
 export const GRID_COLUMNS = 12;
 
 export interface WidgetPlacement {
@@ -27,12 +27,16 @@ export function collides(a: WidgetPlacement, b: WidgetPlacement): boolean {
   return a.id !== b.id && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
-function clampSize(p: WidgetPlacement, def?: WidgetSizeDef): WidgetPlacement {
-  const minW = def?.minW ?? 1;
+/** Widget size limits are defined for 12 columns; scale them to the current grid. */
+const scaleW = (n: number, cols: number) => Math.max(1, Math.round((n * cols) / GRID_COLUMNS));
+
+function clampSize(p: WidgetPlacement, def?: WidgetSizeDef, cols = GRID_COLUMNS): WidgetPlacement {
+  const minW = Math.min(cols, scaleW(def?.minW ?? 1, cols));
   const minH = def?.minH ?? 1;
-  const w = Math.min(GRID_COLUMNS, def?.maxW ?? GRID_COLUMNS, Math.max(minW, Math.round(p.w)));
-  const h = Math.min(def?.maxH ?? 12, Math.max(minH, Math.round(p.h)));
-  const x = Math.min(GRID_COLUMNS - w, Math.max(0, Math.round(p.x)));
+  const maxW = def?.maxW ? scaleW(def.maxW, cols) : cols;
+  const w = Math.min(cols, maxW, Math.max(minW, Math.round(p.w)));
+  const h = Math.min(def?.maxH ?? 16, Math.max(minH, Math.round(p.h)));
+  const x = Math.min(cols - w, Math.max(0, Math.round(p.x)));
   const y = Math.max(0, Math.round(p.y));
   return { ...p, x, y, w, h };
 }
@@ -70,21 +74,21 @@ function placeAndPush(layout: Layout, moved: WidgetPlacement): Layout {
   return compact(next);
 }
 
-export function moveWidget(layout: Layout, id: string, x: number, y: number, defs: WidgetSizeDef[] = []): Layout {
+export function moveWidget(layout: Layout, id: string, x: number, y: number, defs: WidgetSizeDef[] = [], cols = GRID_COLUMNS): Layout {
   const item = layout.find((p) => p.id === id);
   if (!item) return layout;
-  return placeAndPush(layout, clampSize({ ...item, x, y }, defs.find((d) => d.type === item.type)));
+  return placeAndPush(layout, clampSize({ ...item, x, y }, defs.find((d) => d.type === item.type), cols));
 }
 
-export function resizeWidget(layout: Layout, id: string, w: number, h: number, defs: WidgetSizeDef[] = []): Layout {
+export function resizeWidget(layout: Layout, id: string, w: number, h: number, defs: WidgetSizeDef[] = [], cols = GRID_COLUMNS): Layout {
   const item = layout.find((p) => p.id === id);
   if (!item) return layout;
-  return placeAndPush(layout, clampSize({ ...item, w, h }, defs.find((d) => d.type === item.type)));
+  return placeAndPush(layout, clampSize({ ...item, w, h }, defs.find((d) => d.type === item.type), cols));
 }
 
-export function findFreeSpot(layout: Layout, w: number, h: number): { x: number; y: number } {
+export function findFreeSpot(layout: Layout, w: number, h: number, cols = GRID_COLUMNS): { x: number; y: number } {
   for (let y = 0; ; y++) {
-    for (let x = 0; x <= GRID_COLUMNS - w; x++) {
+    for (let x = 0; x <= cols - w; x++) {
       const probe = { id: '__probe__', type: '', x, y, w, h, settings: {} };
       if (!layout.some((p) => collides(probe, p))) return { x, y };
     }
@@ -96,12 +100,13 @@ export function addWidget(
   type: string,
   defs: WidgetSizeDef[],
   id: string,
-  settings: Record<string, unknown> = {}
+  settings: Record<string, unknown> = {},
+  cols = GRID_COLUMNS
 ): Layout {
   const def = defs.find((d) => d.type === type);
   if (!def) throw new Error(`Unknown widget type "${type}"`);
-  const w = Math.min(GRID_COLUMNS, def.defaultW);
-  const spot = findFreeSpot(layout, w, def.defaultH);
+  const w = Math.min(cols, scaleW(def.defaultW, cols));
+  const spot = findFreeSpot(layout, w, def.defaultH, cols);
   return [...layout, { id, type, x: spot.x, y: spot.y, w, h: def.defaultH, settings }];
 }
 
@@ -114,7 +119,7 @@ export function updateWidgetSettings(layout: Layout, id: string, settings: Recor
 }
 
 /** Validates persisted layout data; unknown widget types are dropped, sizes clamped, overlaps resolved. */
-export function parseLayout(raw: unknown, defs: WidgetSizeDef[]): Layout | null {
+export function parseLayout(raw: unknown, defs: WidgetSizeDef[], cols = GRID_COLUMNS): Layout | null {
   if (!Array.isArray(raw)) return null;
   const seen = new Set<string>();
   const out: Layout = [];
@@ -135,11 +140,21 @@ export function parseLayout(raw: unknown, defs: WidgetSizeDef[]): Layout | null 
           h: Number(p.h) || def.defaultH,
           settings: p.settings && typeof p.settings === 'object' ? { ...p.settings } : {},
         },
-        def
+        def,
+        cols
       )
     );
   }
   return compact(out);
+}
+
+/** Changing the column count keeps each widget's relative position and width. */
+export function rescaleLayout(layout: Layout, fromCols: number, toCols: number, defs: WidgetSizeDef[] = []): Layout {
+  if (fromCols === toCols) return layout;
+  const f = toCols / fromCols;
+  return compact(
+    layout.map((p) => clampSize({ ...p, x: Math.round(p.x * f), w: Math.max(1, Math.round(p.w * f)) }, defs.find((d) => d.type === p.type), toCols))
+  );
 }
 
 export function layoutHeight(layout: Layout): number {
