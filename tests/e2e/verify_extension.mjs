@@ -69,10 +69,10 @@ try {
 
   // New tab override
   const ntp = await cdp.openPage('chrome://newtab/');
-  const ntpUrl = await cdp.waitFor(ntp.sessionId, `document.querySelector('.brand-title') && location.href`);
-  check('new tab is Oxygen Control Center', ntpUrl.startsWith(`chrome-extension://${extId}/index.html`), ntpUrl);
+  const ntpUrl = await cdp.waitFor(ntp.sessionId, `document.querySelector('[data-testid=newtab]') && location.href`);
+  check('new tab is the Oxygen new tab page', ntpUrl.startsWith(`chrome-extension://${extId}/newtab.html`), ntpUrl);
   await sleep(400);
-  writeFileSync(join(shots, '01-newtab-dashboard.png'), await cdp.screenshot(ntp.sessionId));
+  writeFileSync(join(shots, '01-newtab-default.png'), await cdp.screenshot(ntp.sessionId));
 
   // Options page via the same API the action button uses
   const pagesBefore = (await cdp.targets()).filter((t) => t.type === 'page').length;
@@ -85,14 +85,14 @@ try {
 
   // Appearance section via hash (what the `ox appearance` omnibox keyword opens)
   const app = await cdp.openPage(`chrome-extension://${extId}/index.html#appearance`);
-  await cdp.waitFor(app.sessionId, `document.querySelector('select') !== null`);
+  await cdp.waitFor(app.sessionId, `document.querySelector('.form-grid select') !== null`);
   check('#appearance deep link opens Appearance section', true);
 
   const csp = await cdp.evaluate(app.sessionId, `document.querySelectorAll('script:not([src])').length`);
   check('no inline scripts on page (MV3 CSP)', csp === 0, `inline=${csp}`);
 
   // Change Surface Contrast in tab "app", observe in tab "ntp"
-  await cdp.evaluate(app.sessionId, `(() => { const s = document.querySelector('select'); s.value = 'graphite'; s.dispatchEvent(new Event('change', {bubbles: true})); return true; })()`);
+  await cdp.evaluate(app.sessionId, `(() => { const s = document.querySelector('.form-grid select'); s.value = 'graphite'; s.dispatchEvent(new Event('change', {bubbles: true})); return true; })()`);
   const bgA = await cdp.waitFor(app.sessionId, `${ROOT_BG} === '#13161C' && ${ROOT_BG}`);
   check('tab A applies graphite surface', bgA === '#13161C', bgA);
   const bgB = await cdp.waitFor(ntp.sessionId, `${ROOT_BG} === '#13161C' && ${ROOT_BG}`);
@@ -120,9 +120,10 @@ try {
   cdp = browser.cdp;
   sw = await serviceWorker(cdp);
   const run2 = await cdp.openPage(`chrome-extension://${extId}/index.html#appearance`);
+  await cdp.waitFor(run2.sessionId, `document.querySelector('.form-grid select') !== null`);
   const bgR = await cdp.waitFor(run2.sessionId, `${ROOT_BG} === '#13161C' && ${ROOT_BG}`);
   check('settings persist across browser restart', bgR === '#13161C', bgR);
-  const selR = await cdp.evaluate(run2.sessionId, `document.querySelector('select').value`);
+  const selR = await cdp.evaluate(run2.sessionId, `document.querySelector('.form-grid select').value`);
   check('Surface Contrast select restored', selR === 'graphite', selR);
   await sleep(800);
   themeState = await cdp.evaluate(sw.session, oxygenThemes);
@@ -146,7 +147,7 @@ try {
   // Disable theme module -> all Oxygen theme packs off (Helium default)
   await cdp.evaluate(again.sessionId, `(() => { location.hash = '#modules'; return true; })()`);
   await cdp.waitFor(again.sessionId, `document.querySelector('.toggle-btn') !== null`);
-  await cdp.evaluate(again.sessionId, `(() => { const items = [...document.querySelectorAll('.module-item')]; const it = items.find(i => i.textContent.includes('Obsidian Metallic')); it.querySelector('.toggle-btn').click(); return true; })()`);
+  await cdp.evaluate(again.sessionId, `(() => { document.querySelector('[data-module-toggle=core-theme-obsidian]').click(); return true; })()`);
   for (let i = 0; i < 25; i++) {
     themeState = await cdp.evaluate(sw.session, oxygenThemes);
     if (themeState.every((t) => !t.enabled)) break;
