@@ -28,10 +28,13 @@ export interface Workspace {
 export interface WorkspaceStore {
   version: 1;
   saved: Workspace[];
+  /** Continuously autosaved state of the running session. */
   lastSession: Workspace | null;
+  /** The autosave of the previous browser run (rotated at browser start). */
+  previousSession: Workspace | null;
 }
 
-export const EMPTY_STORE: WorkspaceStore = { version: 1, saved: [], lastSession: null };
+export const EMPTY_STORE: WorkspaceStore = { version: 1, saved: [], lastSession: null, previousSession: null };
 export const EXPORT_FORMAT = 'oxygen-workspaces';
 
 /** URLs a workspace can reopen (browser-internal pages are dropped). */
@@ -185,5 +188,11 @@ export function parseStore(raw: unknown): WorkspaceStore {
     version: 1,
     saved: Array.isArray(r.saved) ? r.saved : [],
     lastSession: r.lastSession ?? null,
+    previousSession: r.previousSession ?? null,
   };
+}
+
+/** Browser start: the last autosave becomes the restorable "previous session". */
+export function rotateSession(store: WorkspaceStore): WorkspaceStore {
+  return store.lastSession ? { ...store, previousSession: store.lastSession, lastSession: null } : store;
 }

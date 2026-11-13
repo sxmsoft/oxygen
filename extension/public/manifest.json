@@ -2,9 +2,10 @@
   "manifest_version": 3,
   "name": "Oxygen",
   "short_name": "Oxygen",
-  "version": "0.1.0",
-  "version_name": "0.1.0-alpha.1",
-  "description": "Oxygen for Helium: modular Control Center, Obsidian themes and a strict performance budget.",
+  "version": "0.2.0",
+  "version_name": "0.2.0-alpha.1",
+  "description": "__MSG_extDescription__",
+  "default_locale": "en",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1iv5EGZWAp29aBDLKpeJm4jBPVxi9TSWswhZ+M8uqBV2xl+pGy+cmUWRHgKWLMrMxb3sTpTUlW9w/McUljF0vzZSTjdXZamekrTtm6BlBy/2ClYlmHQXbPTtuyLPMrXxCNZeHPfInmHKGB2EJuh8YGOyTNsBuxVjnIB2HpMo013gQOFCCfyIHewqJMR2Mdw0phtl3agmqH/Ort6nKWvFKgoVDpApv6PG92aC+hM0i54HPGl/xUr0eZaztlNXQTqfNxdw+nm5dLMan1QISXKq+QCHrippEn7p97YOh9fpyHpCnzNjYDEPX0P3Uc4pAQZQnNZ0kE71hVm2NcXmL61UoQIDAQAB",
   "minimum_chrome_version": "120",
   "icons": {
@@ -14,7 +15,7 @@
     "128": "icons/128.png"
   },
   "action": {
-    "default_title": "Oxygen Control Center",
+    "default_title": "__MSG_actionTitle__",
     "default_icon": {
       "16": "icons/16.png",
       "32": "icons/32.png"
@@ -25,10 +26,27 @@
     "open_in_tab": true
   },
   "chrome_url_overrides": {
-    "newtab": "index.html"
+    "newtab": "newtab.html"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   },
   "omnibox": {
     "keyword": "ox"
+  },
+  "commands": {
+    "open-palette": {
+      "suggested_key": {
+        "default": "Alt+K"
+      },
+      "description": "__MSG_cmdPalette__"
+    },
+    "open-side-panel": {
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
+      "description": "__MSG_cmdSidePanel__"
+    }
   },
   "background": {
     "service_worker": "background.js",
@@ -36,6 +54,21 @@
   },
   "permissions": [
     "storage",
-    "management"
+    "unlimitedStorage",
+    "management",
+    "tabs",
+    "tabGroups",
+    "sessions",
+    "history",
+    "bookmarks",
+    "favicon",
+    "sidePanel",
+    "scripting",
+    "alarms",
+    "webNavigation",
+    "search"
+  ],
+  "host_permissions": [
+    "<all_urls>"
   ]
 }

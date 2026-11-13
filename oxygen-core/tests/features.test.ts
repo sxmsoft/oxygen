@@ -4,7 +4,7 @@ import { suspendDecision, estimateSavedMb, type SuspenderConfig } from '../../ex
 import { parseDomainList, hostMatches } from '../../extension/src/logic/domains.js';
 import {
   captureWindow, makeWorkspace, exportWorkspaces, parseWorkspacesImport, mergeImported, upsertWorkspace,
-  EMPTY_STORE, tabCount, parseStore,
+  EMPTY_STORE, tabCount, parseStore, rotateSession,
 } from '../../extension/src/logic/workspace.js';
 import { matchRules, ruleMatches, normalizePattern, cssFor, toggleDarkForHost, parseRules, DARK_MODE_CSS, type SiteRule } from '../../extension/src/logic/siteRules.js';
 import { addWidget, moveWidget, resizeWidget, removeWidget, parseLayout, collides, updateWidgetSettings, type WidgetSizeDef, type Layout } from '../../extension/src/logic/layout.js';
@@ -99,6 +99,10 @@ test('workspace: store upsert/merge never overwrites existing ids', () => {
   assert.equal(store.saved.length, 2);
   assert.notEqual(store.saved[0].id, store.saved[1].id);
   assert.deepEqual(parseStore(null), EMPTY_STORE);
+  const rotated = rotateSession({ ...store, lastSession: ws });
+  assert.equal(rotated.previousSession, ws);
+  assert.equal(rotated.lastSession, null);
+  assert.equal(rotateSession(rotated), rotated, 'no autosave yet keeps the previous session');
 });
 
 const rules: SiteRule[] = [

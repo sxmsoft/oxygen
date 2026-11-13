@@ -16,9 +16,13 @@ import {
   type ThemePackStatus,
   type ThemeVariant,
 } from './shared.js';
+import './sw/features.js';
+import { obsidianThemeManifest, resolveObsidianTokens, type ObsidianThemeConfig } from '../../modules/core-theme-obsidian/src/index.js';
+import { moduleConfig } from './logic/moduleState.js';
+import { OXYGEN_THEME_TOKENS_KEY } from './bridge.js';
 
 /**
- * Oxygen service worker. Event-driven only: no timers, no polling.
+ * Oxygen service worker. Event-driven only: no polling (feature modules: ./sw/features.ts).
  * Replaces the fork's native pieces:
  * - OxygenThemeColorMixer -> enable the matching Oxygen theme pack
  * - oxygen://settings     -> action button, options page, new tab, `ox` keyword
@@ -64,7 +68,11 @@ async function applyBrowserTheme(raw: unknown): Promise<void> {
       .map((p) => variantFromThemeName(p.name))
       .filter((v): v is ThemeVariant => v !== null),
   };
-  await chrome.storage.local.set({ [THEME_PACK_STATUS_KEY]: status });
+  // Page tokens for contexts without an OxygenCore (injected palette, popup).
+  const tokens = resolveObsidianTokens(
+    moduleConfig<ObsidianThemeConfig>(isConfigBundle(raw) ? raw : null, THEME_MODULE_ID, obsidianThemeManifest.configSchema)
+  );
+  await chrome.storage.local.set({ [THEME_PACK_STATUS_KEY]: status, [OXYGEN_THEME_TOKENS_KEY]: tokens });
 }
 
 /**

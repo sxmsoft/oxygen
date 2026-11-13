@@ -1,0 +1,6 @@
+{
+  "extDescription": { "message": "Helium için Oxygen: sekme uyutucu, çalışma alanları, komut paleti, yan panel, bileşenli yeni sekme, duvar kâğıtları ve siteye özel kurallar." },
+  "actionTitle": { "message": "Oxygen Kontrol Merkezi" },
+  "cmdPalette": { "message": "Oxygen komut paletini aç" },
+  "cmdSidePanel": { "message": "Oxygen yan panelini aç" }
+}

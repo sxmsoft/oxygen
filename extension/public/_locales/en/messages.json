@@ -1,0 +1,6 @@
+{
+  "extDescription": { "message": "Oxygen for Helium: tab suspender, workspaces, command palette, side panel, widget new tab, wallpapers and per-site rules." },
+  "actionTitle": { "message": "Oxygen Control Center" },
+  "cmdPalette": { "message": "Open the Oxygen command palette" },
+  "cmdSidePanel": { "message": "Open the Oxygen side panel" }
+}

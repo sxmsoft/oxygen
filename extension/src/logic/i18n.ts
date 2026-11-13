@@ -124,6 +124,30 @@ const en = {
   'wp.blur': 'Blur',
   'wp.dim': 'Dim',
   'wp.reduced': 'Animations paused (reduced motion).',
+  'modDesc.core-theme-obsidian': 'Obsidian metallic palettes for Helium and Oxygen pages.',
+  'modDesc.core-perf-guard': 'Enforces lazy module activation and blocks idle background polling loops.',
+  'modDesc.tab-suspender': 'Discards idle background tabs to free memory (pinned, audible, active and allow-listed sites are kept).',
+  'modDesc.workspaces': 'Save and restore named sets of windows, tabs and tab groups; autosaves the last session.',
+  'modDesc.command-palette': 'Keyboard palette for tabs, history, bookmarks and Oxygen commands.',
+  'modDesc.side-panel': 'Vertical tabs with groups, notes and quick links in the browser side panel.',
+  'modDesc.newtab-widgets': 'Clock, weather, quick links, recent tabs, search, notes and workspaces on a draggable grid.',
+  'modDesc.wallpapers': 'New tab backgrounds: colors, gradients, your own image or looping video, and light animated scenes.',
+  'modDesc.site-rules': 'Per-site zoom, opt-in forced dark mode and custom CSS.',
+  'cc.moduleConfig': 'Module configuration',
+  'cc.activeModules': 'Active modules',
+  'cc.disabledNeverRun': 'Disabled modules never execute',
+  'cc.shortcuts': 'Keyboard shortcuts',
+  'cc.shortcutsHint': 'Change them at chrome://extensions/shortcuts. Ctrl+K also works on Oxygen pages.',
+  'cc.notSet': 'not set',
+  'cc.permissions': 'Permissions',
+  'cc.settingsUpdated': 'Settings updated from another Oxygen tab.',
+  'sites.add': 'Add rule',
+  'sites.current': 'Current tab',
+  'sites.zoomDefault': 'default',
+  'ws.export': 'Export JSON',
+  'ws.import': 'Import JSON',
+  'ws.restoreHint': 'Restoring opens new windows with the saved tabs and groups.',
+  'ws.autosaveOff': 'Autosave is off.',
 };
 
 export type MessageKey = keyof typeof en;
@@ -250,6 +274,58 @@ const tr: Record<MessageKey, string> = {
   'wp.blur': 'Bulanıklık',
   'wp.dim': 'Karartma',
   'wp.reduced': 'Animasyonlar duraklatıldı (azaltılmış hareket).',
+  'modDesc.core-theme-obsidian': 'Helium ve Oxygen sayfaları için Obsidian metalik paletleri.',
+  'modDesc.core-perf-guard': 'Modülleri tembel yükler, arka planda boşta sorgulama döngülerini engeller.',
+  'modDesc.tab-suspender': 'Boştaki arka plan sekmelerini uyutarak bellek boşaltır (sabitlenmiş, ses çalan, etkin ve izin listesindeki siteler korunur).',
+  'modDesc.workspaces': 'Pencere, sekme ve sekme gruplarını adlandırılmış setler olarak kaydedip geri yükler; son oturumu otomatik kaydeder.',
+  'modDesc.command-palette': 'Sekmeler, geçmiş, yer imleri ve Oxygen komutları için klavye paleti.',
+  'modDesc.side-panel': 'Tarayıcı yan panelinde gruplu dikey sekmeler, notlar ve hızlı bağlantılar.',
+  'modDesc.newtab-widgets': 'Sürüklenebilir ızgarada saat, hava durumu, hızlı bağlantılar, son sekmeler, arama, notlar ve çalışma alanları.',
+  'modDesc.wallpapers': 'Yeni sekme arka planları: renkler, gradyanlar, kendi görselin veya döngülü videon ve hafif animasyonlu sahneler.',
+  'modDesc.site-rules': 'Siteye özel yakınlaştırma, isteğe bağlı zorla karanlık mod ve özel CSS.',
+  'cc.moduleConfig': 'Modül yapılandırması',
+  'cc.activeModules': 'Etkin modüller',
+  'cc.disabledNeverRun': 'Kapalı modüller hiç çalışmaz',
+  'cc.shortcuts': 'Klavye kısayolları',
+  'cc.shortcutsHint': 'chrome://extensions/shortcuts adresinden değiştirebilirsin. Oxygen sayfalarında Ctrl+K da çalışır.',
+  'cc.notSet': 'atanmadı',
+  'cc.permissions': 'İzinler',
+  'cc.settingsUpdated': 'Ayarlar başka bir Oxygen sekmesinden güncellendi.',
+  'sites.add': 'Kural ekle',
+  'sites.current': 'Geçerli sekme',
+  'sites.zoomDefault': 'varsayılan',
+  'ws.export': 'JSON dışa aktar',
+  'ws.import': 'JSON içe aktar',
+  'ws.restoreHint': 'Geri yükleme, kayıtlı sekme ve gruplarla yeni pencereler açar.',
+  'ws.autosaveOff': 'Otomatik kayıt kapalı.',
+};
+
+/** Turkish labels for module config fields (English falls back to the schema label). */
+const FIELD_TR: Record<string, string> = {
+  'tab-suspender.idleMinutes': 'Uyutma süresi (boşta dakika)',
+  'tab-suspender.excludePinned': 'Sabitlenmiş sekmeleri koru',
+  'tab-suspender.excludeAudible': 'Ses çalan sekmeleri koru',
+  'tab-suspender.whitelist': 'Asla uyutma (alan adları, virgülle)',
+  'workspaces.autosave': 'Son oturumu otomatik kaydet',
+  'command-palette.includeHistory': 'Geçmişte ara',
+  'command-palette.includeBookmarks': 'Yer imlerinde ara',
+  'side-panel.showGroups': 'Sekme gruplarını göster',
+  'newtab-widgets.rowHeight': 'Izgara satır yüksekliği (px)',
+  'wallpapers.kind': 'Duvar kâğıdı',
+  'wallpapers.color1': 'Renk 1',
+  'wallpapers.color2': 'Renk 2',
+  'wallpapers.angle': 'Gradyan açısı',
+  'wallpapers.blur': 'Bulanıklık (px)',
+  'wallpapers.dim': 'Karartma (%)',
+  'site-rules.applyZoom': 'Yakınlaştırma kurallarını uygula',
+  'site-rules.applyStyles': 'Karanlık mod ve özel CSS uygula',
+  'core-theme-obsidian.surfaceContrast': 'Yüzey kontrastı',
+  'core-theme-obsidian.accentColor': 'Vurgu rengi',
+  'core-theme-obsidian.cornerRadiusPx': 'Köşe yarıçapı (px)',
+  'core-theme-obsidian.motionScale': 'Animasyon ölçeği',
+  'core-theme-obsidian.translucentOmnibox': 'Yarı saydam adres çubuğu',
+  'core-perf-guard.strictLazyLoad': 'Sıkı tembel yükleme',
+  'core-perf-guard.memoryBudgetMb': 'Ek bellek bütçesi (MB)',
 };
 
 const DICTS: Record<Locale, Record<MessageKey, string>> = { en, tr };
@@ -266,4 +342,14 @@ export function translate(locale: Locale, key: MessageKey | string, params: Reco
 
 export function missingKeys(locale: Locale): string[] {
   return Object.keys(en).filter((k) => !(k in DICTS[locale]));
+}
+
+export function fieldLabel(locale: Locale, moduleId: string, key: string, fallback: string): string {
+  return locale === 'tr' ? FIELD_TR[`${moduleId}.${key}`] ?? fallback : fallback;
+}
+
+/** Translation with an explicit fallback when the key is unknown. */
+export function translateOr(locale: Locale, key: string, fallback: string): string {
+  const v = translate(locale, key);
+  return v === key ? fallback : v;
 }

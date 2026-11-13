@@ -4,6 +4,8 @@ export const CONTROL_CENTER_SECTIONS = [
   'dashboard',
   'appearance',
   'modules',
+  'workspaces',
+  'sites',
   'performance',
   'advanced',
 ] as const;
