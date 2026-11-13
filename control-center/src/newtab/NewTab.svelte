@@ -6,9 +6,10 @@
   import { moduleCfg, moduleOn } from '../lib/modules';
   import { installPagePalette } from '../lib/pagePalette';
   import {
-    addWidget, layoutHeight, moveWidget, parseLayout, removeWidget, resizeWidget, updateWidgetSettings, GRID_COLUMNS, type Layout,
+    addWidget, layoutHeight, moveWidget, parseLayout, removeWidget, rescaleLayout, resizeWidget, updateWidgetSettings, type Layout,
   } from '../../../extension/src/logic/layout.js';
-  import { ADDED_WIDGETS, WIDGETS, defaultLayout, defaultSettings, widgetDef } from './widgets';
+  import { DEFAULT_GRID, PRESETS, effectiveRowHeight, frameOf, parseGrid, type GridConfig } from '../../../extension/src/logic/gridConfig.js';
+  import { ADDED_WIDGETS, WIDGETS, defaultCity, defaultLayout, defaultSettings, widgetDef } from './widgets';
   import WidgetHost from './WidgetHost.svelte';
   import Wallpaper from './Wallpaper.svelte';
   import { putMedia, deleteMedia } from './wallpaperStore';
@@ -25,11 +26,17 @@
   const widgetsOn = $derived(track(rev, moduleOn(core, 'newtab-widgets')));
   const wallpaperOn = $derived(track(rev, moduleOn(core, 'wallpapers')));
   const wp = $derived(track(rev, moduleCfg(core, 'wallpapers')));
-  const rowH = $derived(track(rev, Number(moduleCfg<{ rowHeight: number }>(core, 'newtab-widgets').rowHeight) || 84));
+  const legacyRowH = $derived(track(rev, Number(moduleCfg<{ rowHeight: number }>(core, 'newtab-widgets').rowHeight) || 84));
+  const gridStored = new StoredValue<unknown>('oxygen.newtab.grid', null);
+  const g = $derived<GridConfig>(parseGrid(gridStored.value, legacyRowH));
+  const cols = $derived(g.columns);
+  const GAP = $derived(g.gap);
+  let vh = $state(900);
+  const rowH = $derived(effectiveRowHeight(g, vh, 18 + (g.showHeader ? 52 : 0) + (vh * g.topSpace) / 100));
   const accent = $derived(track(rev, core.getActiveThemeTokens().accentColor ?? '#d8dee9'));
 
   const stored = new StoredValue<unknown>('oxygen.newtab.layout', null);
-  const layout = $derived<Layout>(stored.ready ? parseLayout(stored.value, WIDGETS) ?? defaultLayout(i18n.locale) : []);
+  const layout = $derived<Layout>(stored.ready && gridStored.ready ? parseLayout(stored.value, WIDGETS, cols) ?? defaultLayout(i18n.locale) : []);
   let preview = $state<Layout | null>(null);
   const shown = $derived(preview ?? layout);
 
@@ -38,8 +45,7 @@
   let settingsFor = $state<string | null>(null);
   let gridEl = $state<HTMLDivElement | null>(null);
   let gridW = $state(1100);
-  const GAP = 14;
-  const colW = $derived((gridW - GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS);
+  const colW = $derived((gridW - GAP * (cols - 1)) / cols);
   const height = $derived(layoutHeight(shown) * (rowH + GAP));
 
   let drag = $state<{ id: string; mode: 'move' | 'resize'; dx: number; dy: number; px: number; py: number } | null>(null);
@@ -63,14 +69,14 @@
   // Layouts saved before a widget type existed get it once (e.g. the bookmarks bar).
   let migrated = false;
   $effect(() => {
-    if (!stored.ready || migrated || typeof chrome === 'undefined' || !chrome.storage) return;
+    if (!stored.ready || !gridStored.ready || migrated || typeof chrome === 'undefined' || !chrome.storage) return;
     migrated = true;
-    const saved = parseLayout(stored.value, WIDGETS);
+    const saved = parseLayout(stored.value, WIDGETS, cols);
     void chrome.storage.local.get(ADDED_WIDGETS.map((a) => a.flag)).then((flags) => {
       let next = saved;
       for (const a of ADDED_WIDGETS) {
         if (flags[a.flag]) continue;
-        if (next && !next.some((w) => w.type === a.type)) next = addWidget(next, a.type, WIDGETS, `w-${a.type}`, defaultSettings(a.type));
+        if (next && !next.some((w) => w.type === a.type)) next = addWidget(next, a.type, WIDGETS, `w-${a.type}`, defaultSettings(a.type), cols);
         void chrome.storage.local.set({ [a.flag]: true });
       }
       if (next && next !== saved) commit(next);
@@ -98,11 +104,11 @@
     if (drag.mode === 'move') {
       const x = Math.round((drag.px - drag.dx) / (colW + GAP));
       const y = Math.round((drag.py - drag.dy) / (rowH + GAP));
-      preview = moveWidget(layout, drag.id, x, Math.max(0, y), WIDGETS);
+      preview = moveWidget(layout, drag.id, x, Math.max(0, y), WIDGETS, cols);
     } else {
       const w = Math.round((drag.px - item.x * (colW + GAP) + GAP) / (colW + GAP));
       const h = Math.round((drag.py - item.y * (rowH + GAP) + GAP) / (rowH + GAP));
-      preview = resizeWidget(layout, drag.id, w, h, WIDGETS);
+      preview = resizeWidget(layout, drag.id, w, h, WIDGETS, cols);
     }
   }
   function endDrag() {
@@ -117,11 +123,44 @@
     const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
     if (!d) return;
     e.preventDefault();
-    commit(e.shiftKey ? resizeWidget(layout, id, p.w + d[0], p.h + d[1], WIDGETS) : moveWidget(layout, id, p.x + d[0], Math.max(0, p.y + d[1]), WIDGETS));
+    commit(e.shiftKey ? resizeWidget(layout, id, p.w + d[0], p.h + d[1], WIDGETS, cols) : moveWidget(layout, id, p.x + d[0], Math.max(0, p.y + d[1]), WIDGETS, cols));
   }
   function add(type: string) {
-    commit(addWidget(layout, type, WIDGETS, `w-${type}-${Date.now().toString(36)}`, defaultSettings(type)));
+    commit(addWidget(layout, type, WIDGETS, `w-${type}-${Date.now().toString(36)}`, defaultSettings(type), cols));
   }
+
+  // ---- grid look & presets ----
+  let undo = $state<{ layout: Layout; grid: unknown } | null>(null);
+  function setGrid(patch: Partial<GridConfig>, debounce = 0) {
+    gridStored.set({ ...$state.snapshot(g), ...patch }, debounce);
+  }
+  function setColumns(n: number) {
+    const next = parseGrid({ ...g, columns: n }).columns;
+    if (next === cols) return;
+    commit(rescaleLayout(layout, cols, next, WIDGETS));
+    setGrid({ columns: next });
+  }
+  function applyPreset(id: string) {
+    const p = PRESETS.find((x) => x.id === id);
+    if (!p) return;
+    undo = { layout: JSON.parse(JSON.stringify(layout)), grid: $state.snapshot(gridStored.value) };
+    gridStored.set({ ...DEFAULT_GRID, rowHeight: legacyRowH, ...p.grid });
+    commit(p.layout(defaultCity(i18n.locale)));
+  }
+  function undoPreset() {
+    if (!undo) return;
+    gridStored.set(undo.grid as GridConfig);
+    commit(undo.layout);
+    undo = null;
+  }
+  function resetAll() {
+    undo = { layout: JSON.parse(JSON.stringify(layout)), grid: $state.snapshot(gridStored.value) };
+    gridStored.set({ ...DEFAULT_GRID });
+    commit(defaultLayout(i18n.locale));
+  }
+  const pageStyle = $derived(
+    `max-width:${g.maxWidth ? g.maxWidth + 'px' : 'none'};margin:${g.align === 'center' ? '0 auto' : g.align === 'end' ? '0 0 0 auto' : '0'}`,
+  );
   function setWidgetSetting(id: string, key: string, value: unknown) {
     commit(updateWidgetSettings(layout, id, { [key]: value }));
   }
@@ -149,12 +188,12 @@
   });
 </script>
 
-<svelte:window onpointermove={onMove} onpointerup={endDrag} onpointercancel={endDrag} />
+<svelte:window bind:innerHeight={vh} onpointermove={onMove} onpointerup={endDrag} onpointercancel={endDrag} />
 
 {#if wallpaperOn}<Wallpaper cfg={wp} {accent} />{/if}
 
-<div class="page" class:editing data-testid="newtab">
-  <header class="top">
+<div class="page" class:editing data-testid="newtab" style={pageStyle} data-columns={cols}>
+  <header class="top" class:bare={!g.showHeader && !editing} style="margin-bottom:{g.topSpace}vh">
     <div class="brand"><img src={logoSvg} alt="" width="22" height="22" /><span>Oxygen</span></div>
     <div class="actions">
       {#if widgetsOn || wallpaperOn}
@@ -183,7 +222,8 @@
         {@const def = widgetDef(w.type)}
         <!-- svelte-ignore a11y_no_noninteractive_tabindex (focusable only in edit mode: arrow keys move, Shift+arrows resize) -->
         <div
-          class="widget ox-glass type-{w.type}"
+          class="widget type-{w.type} frame-{frameOf(w.settings, g)}"
+          class:ox-glass={frameOf(w.settings, g) === 'glass'}
           class:dragging={drag?.id === w.id && drag.mode === 'move'}
           style={drag?.id === w.id && drag.mode === 'move' ? draggedStyle : pos(w)}
           data-widget-id={w.id}
@@ -197,7 +237,7 @@
             <div class="chrome" role="presentation" onpointerdown={(e) => startDrag(e, w.id, 'move')}>
               <span class="grip">⠿ {def ? t(def.title) : w.type}</span>
               <span class="ox-row">
-                {#if def?.settings.length}<button class="ox-icon-btn" aria-label={t('common.settings')} onpointerdown={(e) => e.stopPropagation()} onclick={() => (settingsFor = settingsFor === w.id ? null : w.id)}>⚙</button>{/if}
+                {#if def}<button class="ox-icon-btn" aria-label={t('common.settings')} onpointerdown={(e) => e.stopPropagation()} onclick={() => (settingsFor = settingsFor === w.id ? null : w.id)}>⚙</button>{/if}
                 <button class="ox-icon-btn" aria-label={t('nt.remove')} data-testid="remove-widget" onpointerdown={(e) => e.stopPropagation()} onclick={() => commit(removeWidget(layout, w.id))}>✕</button>
               </span>
             </div>
@@ -211,11 +251,17 @@
                 {#if s.type === 'boolean'}
                   <label class="ox-check"><input type="checkbox" checked={w.settings[s.key] !== undefined ? !!w.settings[s.key] : !!s.default} onchange={(e) => setWidgetSetting(w.id, s.key, (e.target as HTMLInputElement).checked)} />{t(s.label)}</label>
                 {:else if s.type === 'select'}
-                  <label class="ox-label">{t(s.label)}<select class="ox-select" value={String(w.settings[s.key] ?? s.default)} onchange={(e) => setWidgetSetting(w.id, s.key, (e.target as HTMLSelectElement).value)}>{#each s.options ?? [] as o}<option value={o.value}>{t(o.label)}</option>{/each}</select></label>
+                  <label class="ox-label">{t(s.label)}<select class="ox-select" data-setting={s.key} value={String(w.settings[s.key] ?? s.default)} onchange={(e) => setWidgetSetting(w.id, s.key, (e.target as HTMLSelectElement).value)}>{#each s.options ?? [] as o}<option value={o.value}>{t(o.label)}</option>{/each}</select></label>
+                {:else if s.type === 'range'}
+                  {@const v = Number(w.settings[s.key] ?? s.default)}
+                  <label class="ox-label">{t(s.label)} ({v}{s.unit ?? ''})<input type="range" data-setting={s.key} min={s.min} max={s.max} step={s.step} value={v} onchange={(e) => setWidgetSetting(w.id, s.key, Number((e.target as HTMLInputElement).value))} /></label>
                 {:else}
                   <label class="ox-label">{t(s.label)}<input class="ox-input" value={String(w.settings[s.key] ?? s.default)} onchange={(e) => setWidgetSetting(w.id, s.key, (e.target as HTMLInputElement).value)} /></label>
                 {/if}
               {/each}
+              <label class="ox-label">{t('w.frame')}<select class="ox-select" data-setting="frame" value={String(w.settings.frame ?? '')} onchange={(e) => setWidgetSetting(w.id, 'frame', (e.target as HTMLSelectElement).value || undefined)}>
+                <option value="">{t('frame.default')}</option>{#each ['glass', 'solid', 'none'] as f}<option value={f}>{t('frame.' + f)}</option>{/each}
+              </select></label>
             </div>
           {/if}
           {#if editing}<div class="resize" role="presentation" data-testid="resize-handle" onpointerdown={(e) => startDrag(e, w.id, 'resize')}></div>{/if}
@@ -241,6 +287,42 @@
         {/each}
       </div>
       <button class="ox-btn small ghost" onclick={() => commit(defaultLayout(i18n.locale))}>{t('nt.resetLayout')}</button>
+
+      <h3>{t('nt.layout')}</h3>
+      <div class="ox-label">{t('nt.presets')}
+        <div class="presets">
+          {#each PRESETS as p}<button class="ox-btn small" data-testid="preset-{p.id}" onclick={() => applyPreset(p.id)}>{t('nt.preset.' + p.id)}</button>{/each}
+          {#if undo}<button class="ox-btn small ghost" data-testid="preset-undo" onclick={undoPreset}>↶ {t('nt.undo')}</button>{/if}
+        </div>
+      </div>
+      <div class="layout-panel" data-testid="layout-panel">
+        <label class="ox-label">{t('grid.columns')} ({cols})<input type="range" data-testid="grid-columns" min="4" max="24" step="1" value={cols} onchange={(e) => setColumns(Number((e.target as HTMLInputElement).value))} /></label>
+        <label class="ox-label">{t('grid.rowMode')}
+          <select class="ox-select" data-testid="grid-rowmode" value={g.rowMode} onchange={(e) => setGrid({ rowMode: (e.target as HTMLSelectElement).value as GridConfig['rowMode'] })}>
+            <option value="fixed">{t('grid.fixed')}</option><option value="fit">{t('grid.fit')}</option>
+          </select>
+        </label>
+        {#if g.rowMode === 'fixed'}
+          <label class="ox-label">{t('grid.rowHeight')} ({g.rowHeight}px)<input type="range" data-testid="grid-rowheight" min="40" max="160" step="4" value={g.rowHeight} oninput={(e) => setGrid({ rowHeight: Number((e.target as HTMLInputElement).value) }, 150)} /></label>
+        {:else}
+          <label class="ox-label">{t('grid.rows')} ({g.rows})<input type="range" data-testid="grid-rows" min="4" max="16" step="1" value={g.rows} oninput={(e) => setGrid({ rows: Number((e.target as HTMLInputElement).value) }, 150)} /></label>
+        {/if}
+        <label class="ox-label">{t('grid.gap')} ({g.gap}px)<input type="range" data-testid="grid-gap" min="0" max="40" step="2" value={g.gap} oninput={(e) => setGrid({ gap: Number((e.target as HTMLInputElement).value) }, 150)} /></label>
+        <label class="ox-label">{t('grid.maxWidth')} ({g.maxWidth ? g.maxWidth + 'px' : t('grid.full')})<input type="range" data-testid="grid-maxwidth" min="440" max="2400" step="40" value={g.maxWidth || 440} oninput={(e) => { const v = Number((e.target as HTMLInputElement).value); setGrid({ maxWidth: v <= 440 ? 0 : v }, 150); }} /></label>
+        <label class="ox-label">{t('grid.align')}
+          <select class="ox-select" data-testid="grid-align" value={g.align} onchange={(e) => setGrid({ align: (e.target as HTMLSelectElement).value as GridConfig['align'] })}>
+            <option value="center">{t('grid.alignCenter')}</option><option value="start">{t('grid.alignStart')}</option><option value="end">{t('grid.alignEnd')}</option>
+          </select>
+        </label>
+        <label class="ox-label">{t('grid.topSpace')} ({g.topSpace}vh)<input type="range" data-testid="grid-topspace" min="0" max="40" step="1" value={g.topSpace} oninput={(e) => setGrid({ topSpace: Number((e.target as HTMLInputElement).value) }, 150)} /></label>
+        <label class="ox-label">{t('grid.frames')}
+          <select class="ox-select" data-testid="grid-frames" value={g.frames} onchange={(e) => setGrid({ frames: (e.target as HTMLSelectElement).value as GridConfig['frames'] })}>
+            {#each ['glass', 'solid', 'none'] as f}<option value={f}>{t('frame.' + f)}</option>{/each}
+          </select>
+        </label>
+        <label class="ox-check"><input type="checkbox" data-testid="grid-header" checked={g.showHeader} onchange={(e) => setGrid({ showHeader: (e.target as HTMLInputElement).checked })} />{t('grid.showHeader')}</label>
+      </div>
+      <button class="ox-btn small ghost danger" data-testid="reset-all" onclick={resetAll}>{t('nt.resetAll')}</button>
     {/if}
     {#if wallpaperOn}
       <h3>{t('nt.wallpaper')}</h3>
@@ -274,14 +356,21 @@
 {/if}
 
 <style>
-  .page { position: relative; z-index: 1; min-height: 100vh; padding: 18px 32px 48px; max-width: 1240px; margin: 0 auto; }
-  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6vh; }
+  .page { position: relative; z-index: 1; min-height: 100vh; padding: 18px 32px 48px; }
+  .top { display: flex; justify-content: space-between; align-items: center; }
+  .top.bare { position: fixed; top: 10px; right: 14px; z-index: 6; margin: 0 !important; }
+  .top.bare .brand { display: none; }
+  .top.bare .actions { opacity: 0.12; transition: opacity 160ms; }
+  .top.bare:hover .actions, .top.bare:focus-within .actions { opacity: 1; }
   .brand { display: flex; align-items: center; gap: 8px; font-weight: 650; letter-spacing: 0.02em; opacity: 0.85; }
   .actions { display: flex; gap: 6px; }
   .actions a { text-decoration: none; }
   .grid { position: relative; width: 100%; transition: height calc(160ms * var(--ox-motion)) ease; }
   .widget { position: absolute; padding: 14px 16px; display: flex; flex-direction: column; overflow: hidden; transition: left calc(160ms * var(--ox-motion)) ease, top calc(160ms * var(--ox-motion)) ease, width calc(160ms * var(--ox-motion)) ease, height calc(160ms * var(--ox-motion)) ease; }
   .widget.type-search { padding: 0 14px; border-radius: 999px; }
+  .widget.frame-solid { background: var(--ox-surface); border: 1px solid var(--ox-border); border-radius: calc(var(--ox-radius) + 4px); }
+  .widget.frame-none { background: none; border: 0; box-shadow: none; padding-left: 4px; padding-right: 4px; }
+  .widget.frame-none.type-search { padding: 0 14px; background: color-mix(in srgb, var(--ox-text) 6%, transparent); }
   .widget.dragging { transition: none; z-index: 5; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5); opacity: 0.92; }
   .body { flex: 1; min-height: 0; }
   .editing .widget { outline: 1px dashed color-mix(in srgb, var(--ox-accent) 40%, transparent); outline-offset: -1px; }
@@ -297,6 +386,9 @@
   h3 { margin: 8px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ox-muted); }
   .add-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .add-list .ox-btn { justify-content: flex-start; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .layout-panel { display: flex; flex-direction: column; gap: 10px; }
+  .layout-panel input[type='range'] { width: 100%; }
   .colors input[type='color'] { width: 40px; height: 30px; border: 1px solid var(--ox-border); background: transparent; border-radius: 8px; }
   .uploads { flex-wrap: wrap; }
   .err { color: #fca5a5; font-size: 12px; margin: 0; }

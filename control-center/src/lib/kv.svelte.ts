@@ -40,6 +40,8 @@ export interface QuickLink {
   url: string;
   /** set for links imported from Helium ('helium') or the most-visited fallback ('topsites') */
   source?: 'helium' | 'topsites';
+  /** LinkIcon from linkIcons.ts; missing = site icon */
+  icon?: unknown;
 }
 
 /**

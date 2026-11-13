@@ -1,12 +1,18 @@
 import type { Component } from 'svelte';
 import type { MessageKey } from '../../../extension/src/logic/i18n.js';
 import type { Layout, WidgetSizeDef } from '../../../extension/src/logic/layout.js';
+import { PRESETS } from '../../../extension/src/logic/gridConfig.js';
 
 export interface WidgetSetting {
   key: string;
   label: MessageKey;
-  type: 'boolean' | 'text' | 'select';
+  type: 'boolean' | 'text' | 'select' | 'range';
   options?: { value: string; label: MessageKey | string }[];
+  min?: number;
+  max?: number;
+  step?: number;
+  /** shown after the value of a range ('px') */
+  unit?: string;
   default: unknown;
 }
 
@@ -42,8 +48,15 @@ export const WIDGETS: WidgetDef[] = [
     load: () => import('./widgets/Search.svelte'),
   },
   {
-    type: 'links', title: 'w.links', icon: '⊞', defaultW: 8, defaultH: 2, minW: 3, minH: 2, maxH: 6,
-    settings: [],
+    type: 'links', title: 'w.links', icon: '⊞', defaultW: 8, defaultH: 2, minW: 2, minH: 1, maxH: 8,
+    settings: [
+      { key: 'iconSize', label: 'links.iconSize', type: 'range', default: 44, min: 24, max: 96, step: 4, unit: 'px' },
+      { key: 'shape', label: 'links.shape', type: 'select', default: 'rounded', options: [{ value: 'rounded', label: 'shape.rounded' }, { value: 'circle', label: 'shape.circle' }, { value: 'square', label: 'shape.square' }] },
+      { key: 'showLabels', label: 'links.showLabels', type: 'boolean', default: true },
+      { key: 'columns', label: 'links.columns', type: 'select', default: 'auto', options: [{ value: 'auto', label: 'links.columnsAuto' }, ...['3', '4', '5', '6', '7', '8', '10', '12'].map((n) => ({ value: n, label: n }))] },
+      { key: 'align', label: 'links.align', type: 'select', default: 'start', options: [{ value: 'start', label: 'grid.alignStart' }, { value: 'center', label: 'grid.alignCenter' }, { value: 'end', label: 'grid.alignEnd' }] },
+      { key: 'tile', label: 'links.tile', type: 'select', default: 'plain', options: [{ value: 'plain', label: 'tile.plain' }, { value: 'card', label: 'tile.card' }] },
+    ],
     load: () => import('./widgets/Links.svelte'),
   },
   {
@@ -81,15 +94,9 @@ export function defaultSettings(type: string): Record<string, unknown> {
 /** Widgets added to layouts saved before they existed (once; removing them afterwards sticks). */
 export const ADDED_WIDGETS: { type: string; flag: string }[] = [{ type: 'bookmarks', flag: 'oxygen.newtab.added.bookmarks' }];
 
+export const defaultCity = (locale: string) => (locale === 'tr' ? 'İstanbul' : '');
+
+/** The 'dashboard' preset is the default layout. */
 export function defaultLayout(locale: string): Layout {
-  const city = locale === 'tr' ? 'İstanbul' : '';
-  return [
-    { id: 'w-search', type: 'search', x: 2, y: 0, w: 8, h: 1, settings: {} },
-    { id: 'w-links', type: 'links', x: 0, y: 1, w: 8, h: 2, settings: {} },
-    { id: 'w-clock', type: 'clock', x: 8, y: 1, w: 4, h: 2, settings: defaultSettings('clock') },
-    { id: 'w-bookmarks', type: 'bookmarks', x: 0, y: 3, w: 8, h: 2, settings: defaultSettings('bookmarks') },
-    { id: 'w-weather', type: 'weather', x: 8, y: 3, w: 4, h: 2, settings: { ...defaultSettings('weather'), city } },
-    { id: 'w-workspaces', type: 'workspaces', x: 0, y: 5, w: 4, h: 2, settings: {} },
-    { id: 'w-recent', type: 'recent', x: 4, y: 5, w: 4, h: 3, settings: defaultSettings('recent') },
-  ];
+  return PRESETS[0].layout(defaultCity(locale));
 }

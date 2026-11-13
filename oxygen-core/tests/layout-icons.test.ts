@@ -82,3 +82,12 @@ test('high-res icon candidates come largest first', () => {
     'https://site.example/apple-touch-icon.png',
   ]);
 });
+
+import { mergeShortcuts } from '../../extension/src/logic/shortcuts.js';
+test('re-import keeps a custom icon chosen for an imported shortcut', () => {
+  const icon = { kind: 'emoji', text: '🎮', bg: '#112233' };
+  const before = mergeShortcuts([], [{ title: 'A', url: 'https://a.example/' }]);
+  const edited = [{ ...before[0], icon }];
+  const after = mergeShortcuts(edited, [{ title: 'A2', url: 'https://a.example/' }]);
+  assert.deepEqual([after.length, after[0].title, after[0].icon], [1, 'A2', icon]);
+});

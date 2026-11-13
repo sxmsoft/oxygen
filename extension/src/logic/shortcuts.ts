@@ -15,6 +15,8 @@ export interface QuickLinkLike extends Shortcut {
   id: string;
   /** where the link came from: 'helium' import, 'topsites' fallback, or user-added (undefined) */
   source?: 'helium' | 'topsites';
+  /** user-chosen icon (see linkIcons.ts); kept across re-imports */
+  icon?: unknown;
 }
 
 export interface ImportFile {
@@ -104,11 +106,13 @@ export function fingerprint(shortcuts: Shortcut[]): string {
  * same source that are no longer in Helium are dropped, user-added links never.
  */
 export function mergeShortcuts(existing: QuickLinkLike[], imported: Shortcut[], source: 'helium' | 'topsites' = 'helium'): QuickLinkLike[] {
+  const icons = new Map(existing.filter((l) => l.icon).map((l) => [urlKey(l.url), l.icon]));
   const head: QuickLinkLike[] = dedupeShortcuts(imported).map((s, i) => ({
     id: `${source}-${i}-${fingerprint([s])}`,
     title: s.title,
     url: s.url,
     source,
+    ...(icons.has(urlKey(s.url)) ? { icon: icons.get(urlKey(s.url)) } : {}),
   }));
   const keys = new Set(head.map((s) => urlKey(s.url)));
   const tail = existing.filter((l) => l.source !== source && !keys.has(urlKey(l.url)));
