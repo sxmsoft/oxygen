@@ -42,6 +42,14 @@ the browser language unless you pick one under *Advanced → Language*.
 | Wallpapers | Solid, gradient, image or video (mp4/webm, looped and muted, stored in IndexedDB), or animated aurora/particles scenes. Blur and dim controls. Honors `prefers-reduced-motion` and pauses when hidden. |
 | Site rules | Per-site zoom, an opt-in forced dark mode (CSS filter) and custom CSS. Managed in the Control Center or from the palette ("Toggle dark mode for this site"). |
 
+### Performance
+
+- **Performance mode** (Customize → Performance) is on by default when the device reports 8 GB of RAM or less. It pauses animated wallpapers and turns blur effects off.
+- Animated wallpapers run only while the new tab is visible, focused and in use: aurora at 15 fps on a small canvas, particles at 30 fps. They stop after 90 s without input. The default wallpaper is a static gradient.
+- Frosted glass (`backdrop-filter`) is opt-in. Over an animated wallpaper it re-blurs the whole window on every frame.
+- Widget drags are coalesced to one update per frame, and storage is written once, on drop. Writes that change nothing are skipped, so another Oxygen tab never echoes a write back.
+- `node tests/perf/measure.mjs --ext dist/extension [--profile-copy DIR]` measures startup CPU, idle CPU per process type, drag cost, service worker lifetime, PSS memory and shutdown. `tests/e2e/verify_perf.mjs` turns these into regression thresholds.
+
 ### Helium shortcuts and bookmarks
 
 - **Bookmarks are not copied.** The *Bookmarks bar* widget and the side panel's *Bookmarks* tab show Helium's own bookmarks bar live, through `chrome.bookmarks`: folders in order, plus "All bookmarks" (Other and Mobile bookmarks).
