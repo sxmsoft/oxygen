@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -133,6 +133,7 @@ export function stageExtension(srcDir) {
   const dir = join(mkdtempSync(join(tmpdir(), 'oxygen-e2e-ext-')), 'extension');
   cpSync(srcDir, dir, { recursive: true });
   rmSync(join(dir, 'imported-shortcuts.json'), { force: true });
+  process.on('exit', () => rmSync(dirname(dir), { recursive: true, force: true }));
   return dir;
 }
 
