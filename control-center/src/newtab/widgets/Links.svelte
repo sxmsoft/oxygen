@@ -15,7 +15,7 @@
   const align = $derived(String(settings.align ?? 'start'));
   const card = $derived(settings.tile === 'card');
   const tileW = $derived(Math.max(iconSize + 34, showLabels ? 86 : 0));
-  const tileH = $derived(iconSize + (showLabels ? 36 : 18));
+  const tileH = $derived(iconSize + (showLabels ? 28 : 14));
 
   let status = $state('');
   // Picks up a new Helium import even when the service worker missed it (applied once per content).
@@ -179,10 +179,10 @@
 {/if}
 
 <style>
-  .links { height: 100%; display: grid; grid-auto-rows: var(--th); gap: 8px; overflow: auto; align-content: start; }
+  .links { height: 100%; display: grid; grid-auto-rows: var(--th); gap: 6px; overflow: auto; align-content: start; scrollbar-width: thin; }
   .tile { position: relative; border-radius: var(--ox-radius); }
   .tile.dragging { opacity: 0.45; }
-  .hit, .tile.add { all: unset; box-sizing: border-box; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; border-radius: var(--ox-radius); cursor: pointer; color: var(--ox-text); }
+  .hit, .tile.add { all: unset; box-sizing: border-box; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border-radius: var(--ox-radius); cursor: pointer; color: var(--ox-text); }
   .editing .hit { cursor: grab; touch-action: none; }
   .hit:hover, .tile.add:hover { background: color-mix(in srgb, var(--ox-text) 7%, transparent); }
   .card .hit { background: color-mix(in srgb, var(--ox-surface) 60%, transparent); border: 1px solid var(--ox-border); }
