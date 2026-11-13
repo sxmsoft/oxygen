@@ -50,28 +50,27 @@ export function compact(layout: Layout, pinnedId?: string): Layout {
     if (p.id !== pinnedId) {
       while (p.y > 0 && !placed.some((q) => collides({ ...p, y: p.y - 1 }, q))) p.y -= 1;
     }
-    while (placed.some((q) => collides(p, q))) p.y += 1;
+    for (let hit = placed.find((q) => collides(p, q)); hit; hit = placed.find((q) => collides(p, q))) p.y = hit.y + hit.h;
     placed.push(p);
   }
   return layout.map((orig) => placed.find((p) => p.id === orig.id)!);
 }
 
+/**
+ * Puts `moved` where it was dropped and pushes everything it overlaps down,
+ * then compacts. Each other widget is placed once, top to bottom, below
+ * whatever it would overlap, so this always terminates (an earlier version
+ * re-queued stale copies and could loop forever, freezing the new tab).
+ */
 function placeAndPush(layout: Layout, moved: WidgetPlacement): Layout {
-  let next = layout.map((p) => (p.id === moved.id ? moved : p));
-  // Push colliding widgets below the moved one, cascading.
-  const queue = [moved];
-  while (queue.length) {
-    const cur = queue.shift()!;
-    next = next.map((p) => {
-      if (p.id !== moved.id && collides(cur, p)) {
-        const pushed = { ...p, y: cur.y + cur.h };
-        queue.push(pushed);
-        return pushed;
-      }
-      return p;
-    });
+  const placed: WidgetPlacement[] = [moved];
+  const others = layout.filter((p) => p.id !== moved.id).sort((a, b) => a.y - b.y || a.x - b.x);
+  for (const o of others) {
+    const p = { ...o };
+    for (let hit = placed.find((q) => collides(p, q)); hit; hit = placed.find((q) => collides(p, q))) p.y = hit.y + hit.h;
+    placed.push(p);
   }
-  return compact(next);
+  return compact(layout.map((orig) => placed.find((p) => p.id === orig.id)!));
 }
 
 export function moveWidget(layout: Layout, id: string, x: number, y: number, defs: WidgetSizeDef[] = [], cols = GRID_COLUMNS): Layout {
