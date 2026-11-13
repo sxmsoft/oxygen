@@ -57,8 +57,13 @@ try {
   const swManifest = await cdp.evaluate(sw.session, 'chrome.runtime.getManifest().name + " " + chrome.runtime.getManifest().version_name');
   check('manifest loaded', swManifest.startsWith('Oxygen'), swManifest);
 
-  await sleep(800);
-  let themeState = await cdp.evaluate(sw.session, oxygenThemes);
+  // Theme sync is async (onInstalled -> storage -> management); poll up to 5 s.
+  let themeState = [];
+  for (let i = 0; i < 25; i++) {
+    themeState = await cdp.evaluate(sw.session, oxygenThemes);
+    if (themeState.some((t) => t.enabled)) break;
+    await sleep(200);
+  }
   check('theme pack installed', themeState.length === 1, JSON.stringify(themeState));
   check('default theme pack = Obsidian', themeState.filter((t) => t.enabled).map((t) => t.name).join() === 'Oxygen Theme Obsidian', JSON.stringify(themeState.filter((t) => t.enabled)));
 
@@ -114,25 +119,50 @@ try {
   browser = await launchBrowser({ binary, profileDir: profile, extensions: [extDir, pack('graphite')] });
   cdp = browser.cdp;
   sw = await serviceWorker(cdp);
-  const again = await cdp.openPage(`chrome-extension://${extId}/index.html#appearance`);
-  const bgR = await cdp.waitFor(again.sessionId, `${ROOT_BG} === '#13161C' && ${ROOT_BG}`);
+  const run2 = await cdp.openPage(`chrome-extension://${extId}/index.html#appearance`);
+  const bgR = await cdp.waitFor(run2.sessionId, `${ROOT_BG} === '#13161C' && ${ROOT_BG}`);
   check('settings persist across browser restart', bgR === '#13161C', bgR);
-  const selR = await cdp.evaluate(again.sessionId, `document.querySelector('select').value`);
+  const selR = await cdp.evaluate(run2.sessionId, `document.querySelector('select').value`);
   check('Surface Contrast select restored', selR === 'graphite', selR);
   await sleep(800);
   themeState = await cdp.evaluate(sw.session, oxygenThemes);
   check('restart with Graphite pack -> Graphite browser theme active', themeState.filter((t) => t.enabled).map((t) => t.name).join() === 'Oxygen Theme Graphite', JSON.stringify(themeState));
 
+  await closeBrowser(browser);
+  browser = null;
+
+  // ---- Run 3: restart with the Midnight pack -> config adopts the launcher's choice
+  browser = await launchBrowser({ binary, profileDir: profile, extensions: [extDir, pack('midnight')] });
+  cdp = browser.cdp;
+  sw = await serviceWorker(cdp);
+  await sleep(1000);
+  const adopted = await cdp.evaluate(sw.session, `chrome.storage.local.get('oxygen.config.v1').then(r => r['oxygen.config.v1'].modules['core-theme-obsidian'])`);
+  check('launcher pack (midnight) adopted into config, other settings kept', adopted.surfaceContrast === 'midnight' && adopted.accentColor === '#6EE7B7', JSON.stringify(adopted));
+  const again = await cdp.openPage(`chrome-extension://${extId}/index.html#appearance`);
+  const bgM = await cdp.waitFor(again.sessionId, `${ROOT_BG} === '#080C16' && ${ROOT_BG}`);
+  check('Control Center follows adopted Midnight surface', bgM === '#080C16', bgM);
+  writeFileSync(join(shots, '04-appearance-midnight.png'), await cdp.screenshot(again.sessionId));
+
   // Disable theme module -> all Oxygen theme packs off (Helium default)
   await cdp.evaluate(again.sessionId, `(() => { location.hash = '#modules'; return true; })()`);
   await cdp.waitFor(again.sessionId, `document.querySelector('.toggle-btn') !== null`);
   await cdp.evaluate(again.sessionId, `(() => { const items = [...document.querySelectorAll('.module-item')]; const it = items.find(i => i.textContent.includes('Obsidian Metallic')); it.querySelector('.toggle-btn').click(); return true; })()`);
-  await sleep(1000);
-  themeState = await cdp.evaluate(sw.session, oxygenThemes);
-  check('disabling theme module reverts to Helium default theme', themeState.every((t) => !t.enabled), JSON.stringify(themeState));
+  for (let i = 0; i < 25; i++) {
+    themeState = await cdp.evaluate(sw.session, oxygenThemes);
+    if (themeState.every((t) => !t.enabled)) break;
+    await sleep(200);
+  }
+  const ids = await cdp.evaluate(sw.session, `chrome.storage.local.get('oxygen.config.v1').then(r => r['oxygen.config.v1'].enabledModuleIds)`);
+  check('disabling theme module reverts to Helium default theme', themeState.every((t) => !t.enabled), JSON.stringify({ themeState, enabledModuleIds: ids }));
   writeFileSync(join(shots, '03-modules.png'), await cdp.screenshot(again.sessionId));
 } catch (err) {
-  check('unexpected error', false, err.stack ?? String(err));
+  let dump = '';
+  try {
+    const t = (await browser.cdp.targets()).find((t) => t.type === 'service_worker' && t.url.endsWith('/background.js'));
+    const sess = await browser.cdp.attach(t.targetId);
+    dump = JSON.stringify(await browser.cdp.evaluate(sess, 'chrome.storage.local.get(null)'));
+  } catch {}
+  check('unexpected error', false, (err.stack ?? String(err)) + (dump ? '\n  storage: ' + dump : ''));
 } finally {
   if (browser) await closeBrowser(browser);
   rmSync(profile, { recursive: true, force: true });
