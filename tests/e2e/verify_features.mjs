@@ -26,6 +26,8 @@ const extDir = stageExtension(join(repo, 'dist/extension'));
 const profile = mkdtempSync(join(tmpdir(), 'oxygen-e2e-features-'));
 const media = mkdtempSync(join(tmpdir(), 'oxygen-e2e-media-'));
 
+/** search, links, clock, bookmarks bar, weather, workspaces, recent */
+const DEFAULT_WIDGETS = 7;
 const results = [];
 function check(name, ok, detail = '') {
   results.push({ name, ok: !!ok, detail: typeof detail === 'string' ? detail : JSON.stringify(detail) });
@@ -380,8 +382,8 @@ try {
     ] }).then(() => true)`);
     const nt = await cdp.openPage('chrome://newtab/');
     const S = nt.sessionId;
-    const n = await cdp.waitFor(S, `document.querySelectorAll('[data-widget-id]').length >= 6 && document.querySelectorAll('[data-widget-id]').length`);
-    check('default widgets rendered (lazy-loaded)', n === 6, `widgets=${n}`);
+    const n = await cdp.waitFor(S, `document.querySelectorAll('[data-widget-id]').length >= ${DEFAULT_WIDGETS} && document.querySelectorAll('[data-widget-id]').length`);
+    check('default widgets rendered (lazy-loaded)', n === DEFAULT_WIDGETS, `widgets=${n}`);
     // Weather uses the widget's city setting; set one explicitly (default locale here is en).
     const layout0 = await cdp.waitFor(sw, `chrome.storage.local.get('oxygen.newtab.layout').then(r => r['oxygen.newtab.layout'] ?? 'none')`);
     await cdp.evaluate(S, `document.querySelector('[data-testid=customize]').click() || true`);
@@ -393,10 +395,10 @@ try {
     check('weather widget (Open-Meteo geocoding + forecast, no key)', wstate.startsWith('ok'), wstate);
     // Add + remove widgets
     await cdp.evaluate(S, `document.querySelector('[data-testid=add-notes]').click() || true`);
-    const n2 = await cdp.waitFor(S, `document.querySelectorAll('[data-widget-id]').length === 7 && 7`);
-    check('widget added from the customize drawer', n2 === 7);
+    const n2 = await cdp.waitFor(S, `document.querySelectorAll('[data-widget-id]').length === ${DEFAULT_WIDGETS + 1} && ${DEFAULT_WIDGETS + 1}`);
+    check('widget added from the customize drawer', n2 === DEFAULT_WIDGETS + 1);
     await cdp.evaluate(S, `document.querySelector('[data-widget-type=notes] [data-testid=remove-widget]').click() || true`);
-    await cdp.waitFor(S, `document.querySelectorAll('[data-widget-id]').length === 6`);
+    await cdp.waitFor(S, `document.querySelectorAll('[data-widget-id]').length === ${DEFAULT_WIDGETS}`);
     check('widget removed', true);
     // Drag the clock to the right half of row 1 with real mouse input.
     const rect = (sel) => cdp.evaluate(S, `(() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
@@ -424,11 +426,11 @@ try {
     // Persistence: reload keeps the layout.
     const stored = await ev(`chrome.storage.local.get('oxygen.newtab.layout').then(r => JSON.stringify(r['oxygen.newtab.layout'].map(w => [w.id, w.x, w.y, w.w, w.h])))`);
     await cdp.send('Page.reload', {}, S);
-    await cdp.waitFor(S, `document.querySelectorAll('[data-widget-id]').length === 6`);
+    await cdp.waitFor(S, `document.querySelectorAll('[data-widget-id]').length === ${DEFAULT_WIDGETS}`);
     await sleep(300);
     const domLayout = await cdp.evaluate(S, `[...document.querySelectorAll('[data-widget-id]')].map(e => e.dataset.widgetId).sort().join()`);
     const stored2 = await ev(`chrome.storage.local.get('oxygen.newtab.layout').then(r => JSON.stringify(r['oxygen.newtab.layout'].map(w => [w.id, w.x, w.y, w.w, w.h])))`);
-    check('layout persists across reloads', stored === stored2 && domLayout.split(',').length === 6, stored2);
+    check('layout persists across reloads', stored === stored2 && domLayout.split(',').length === DEFAULT_WIDGETS, stored2);
 
     // ---- wallpapers
     const wp = () => cdp.evaluate(S, `(() => { const w = document.querySelector('[data-testid=wallpaper]'); return w && { kind: w.dataset.kind, playing: w.dataset.playing, reduced: w.dataset.reduced, bg: w.querySelector('.media').style.background.slice(0, 40), video: !!w.querySelector('video'), paused: w.querySelector('video')?.paused ?? null }; })()`);
@@ -494,7 +496,7 @@ try {
     check('disabling New Tab Widgets leaves a minimal page', min);
     await toggleModule('newtab-widgets', true);
     await cdp.send('Page.reload', {}, S); // leave edit mode for the final shot
-    await cdp.waitFor(S, `document.querySelectorAll('[data-widget-id]').length === 6 && document.querySelector('[data-testid=widget-weather]')?.dataset.state === 'ok'`, 12000);
+    await cdp.waitFor(S, `document.querySelectorAll('[data-widget-id]').length === ${DEFAULT_WIDGETS} && document.querySelector('[data-testid=widget-weather]')?.dataset.state === 'ok'`, 12000);
     await sleep(1200);
     await shot(S, '10-newtab-widgets-aurora.png');
   });
