@@ -1,0 +1,15 @@
+# Copyright 2026 The Oxygen Browser Authors
+# Licensed under GPL-3.0.
+
+import("//tools/grit/grit_rule.gni")
+
+grit("generated_resources") {
+  source = "resources.grd"
+  outputs = [
+    "grit/oxygen_control_center_generated.h",
+    "grit/oxygen_control_center_generated_map.cc",
+    "grit/oxygen_control_center_generated_map.h",
+    "oxygen_control_center_generated.pak",
+  ]
+  output_dir = "$root_gen_dir/components/oxygen_control_center/resources"
+}

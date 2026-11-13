@@ -1,0 +1,22 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ox-metal" x1="36" y1="24" x2="220" y2="232" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="50%" stop-color="#D4D8DF"/>
+      <stop offset="100%" stop-color="#8C939E"/>
+    </linearGradient>
+    <radialGradient id="ox-ring" cx="50%" cy="50%" r="50%">
+      <stop offset="72%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#A8B0BC"/>
+    </radialGradient>
+  </defs>
+  <rect width="256" height="256" rx="62" fill="#07080B"/>
+  <circle cx="128" cy="128" r="88" stroke="url(#ox-ring)" stroke-width="8"/>
+  <g stroke="url(#ox-metal)" stroke-width="11" stroke-linecap="round">
+    <line x1="128" y1="62" x2="128" y2="194"/>
+    <line x1="62" y1="128" x2="194" y2="128"/>
+    <line x1="81.3" y1="81.3" x2="174.7" y2="174.7"/>
+    <line x1="174.7" y1="81.3" x2="81.3" y2="174.7"/>
+  </g>
+  <circle cx="128" cy="128" r="14" fill="#F4F6FA"/>
+</svg>

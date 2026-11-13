@@ -1,0 +1,16 @@
+# Copyright 2026 The Oxygen Browser Authors
+# Licensed under GPL-3.0.
+
+static_library("oxygen_core") {
+  sources = [
+    "oxygen_core_prefs.cc",
+    "oxygen_core_prefs.h",
+    "oxygen_pref_names.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/pref_registry",
+    "//components/prefs",
+  ]
+}

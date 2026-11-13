@@ -1,0 +1,10 @@
+node_modules/
+dist/
+oxygen-core/dist/
+control-center/dist/
+upstream/helium-linux/
+benchmarks/reports/*.json
+benchmarks/reports/*.md
+__pycache__/
+*.pyc
+.DS_Store

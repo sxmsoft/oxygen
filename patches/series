@@ -1,0 +1,5 @@
+oxygen/core/oxygen-branding.patch
+oxygen/core/oxygen-protocol.patch
+oxygen/core/oxygen-core-integration.patch
+oxygen/ui/oxygen-native-theme.patch
+oxygen/ui/oxygen-control-center-webui.patch

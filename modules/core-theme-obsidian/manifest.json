@@ -1,0 +1,51 @@
+{
+  "id": "core-theme-obsidian",
+  "name": "Obsidian Metallic",
+  "description": "First native Oxygen Browser theme module featuring deep obsidian surfaces and metallic silver accents.",
+  "version": "0.1.0",
+  "author": "Oxygen Browser Team",
+  "category": "core",
+  "minOxygenVersion": "0.1.0-alpha.1",
+  "permissions": ["config:read", "config:write", "theme:tokens"],
+  "dependencies": [],
+  "entryPoint": "src/index.ts",
+  "configSchema": {
+    "surfaceContrast": {
+      "type": "enum",
+      "label": "Surface Contrast",
+      "description": "Base background luminance for browser frame, toolbar, and Control Center.",
+      "default": "obsidian",
+      "options": ["obsidian", "graphite", "midnight"]
+    },
+    "accentColor": {
+      "type": "color",
+      "label": "Accent Color",
+      "description": "Primary highlight color for active tabs, switches, and focus rings.",
+      "default": "#D8DEE9"
+    },
+    "cornerRadiusPx": {
+      "type": "number",
+      "label": "Corner Radius (px)",
+      "description": "Native border radius applied to tabs, omnibox, and Control Center cards.",
+      "default": 10,
+      "min": 0,
+      "max": 16,
+      "step": 1
+    },
+    "motionScale": {
+      "type": "number",
+      "label": "Animation Scale",
+      "description": "Multiplier for UI transition durations (0 disables animations).",
+      "default": 1,
+      "min": 0,
+      "max": 1.5,
+      "step": 0.25
+    },
+    "translucentOmnibox": {
+      "type": "boolean",
+      "label": "Translucent Omnibox",
+      "description": "Allow frame tinting to subtly bleed through the address bar surface.",
+      "default": true
+    }
+  }
+}

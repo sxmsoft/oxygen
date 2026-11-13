@@ -1,0 +1,16 @@
+// Copyright 2026 The Oxygen Browser Authors
+// Licensed under GPL-3.0.
+
+CANVAS_DIMENSIONS, 56,
+STROKE, 2.6f,
+CIRCLE, 28, 28, 21.5f,
+STROKE, 3.2f,
+CAP_ROUND,
+MOVE_TO, 28, 12,
+LINE_TO, 28, 44,
+MOVE_TO, 12, 28,
+LINE_TO, 44, 28,
+MOVE_TO, 16.7f, 16.7f,
+LINE_TO, 39.3f, 39.3f,
+MOVE_TO, 39.3f, 16.7f,
+LINE_TO, 16.7f, 39.3f,

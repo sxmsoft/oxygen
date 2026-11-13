@@ -1,0 +1,17 @@
+{
+  "project": "Oxygen Browser",
+  "oxygen_version": "0.1.0-alpha.1",
+  "helium_linux": {
+    "repository": "https://github.com/imputnet/helium-linux.git",
+    "branch": "main",
+    "commit": "039f557c925b5860c3e207ca6bae869e0ab7923b"
+  },
+  "helium": {
+    "repository": "https://github.com/imputnet/helium.git",
+    "branch": "main",
+    "commit": "a2d96a753a3e9f10e10170615f8eaed6b159e85b",
+    "chromium_version": "157.0.8103.78",
+    "helium_version": "0",
+    "helium_revision": "3"
+  }
+}
