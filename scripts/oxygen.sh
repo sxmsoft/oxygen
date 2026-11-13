@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UPSTREAM_LINUX="${ROOT_DIR}/upstream/helium-linux"
+# Low-priority, resource-capped container runtime (see scripts/lowprio/docker)
+export PATH="${ROOT_DIR}/scripts/lowprio:${PATH}"
+OXYGEN_JOBS="${OXYGEN_JOBS:-4}"
 
 usage() {
   cat <<EOF
@@ -74,11 +77,12 @@ cmd_build() {
   docker run --rm -i \
     -u "$(id -u):$(id -g)" \
     -v "${UPSTREAM_LINUX}:/repo" \
+    -e OXYGEN_JOBS="${OXYGEN_JOBS}" \
     chromium-builder:trixie-slim \
     bash -lc '
       cd /repo/build/src &&
       ./buildtools/linux64/gn gen out/Default --fail-on-unused-args &&
-      ./third_party/depot_tools/autoninja.py -C out/Default chrome
+      ./third_party/depot_tools/autoninja.py -j "${OXYGEN_JOBS}" -C out/Default chrome
     '
 }
 

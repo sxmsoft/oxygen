@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Oxygen: route Helium's `docker` calls to rootless podman with host-friendly limits,
+# so long Chromium builds only use idle CPU and never starve the desktop.
+#   OXYGEN_MEM / OXYGEN_MEMSWAP  container RAM / RAM+swap caps (default 4g / 9g)
+set -euo pipefail
+lp=(nice -n 19 ionice -c3)
+if [[ "${1:-}" == run ]]; then
+  shift
+  exec "${lp[@]}" podman run \
+    --userns=keep-id \
+    --cpu-shares=2 \
+    --memory="${OXYGEN_MEM:-4g}" \
+    --memory-swap="${OXYGEN_MEMSWAP:-9g}" \
+    "$@"
+fi
+exec "${lp[@]}" podman "$@"
