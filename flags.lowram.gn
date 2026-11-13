@@ -1,8 +1,0 @@
-# Low-RAM Chromium/Helium build profile (recommended for <= 16 GB RAM hosts)
-# Reduces linker peak RSS so LLD fits inside 8 GB RAM + swap without OOM.
-symbol_level = 0
-blink_symbol_level = 0
-v8_symbol_level = 0
-use_thin_lto = false
-concurrent_links = 1
-enable_precompiled_headers = false

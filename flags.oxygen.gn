@@ -1,4 +1,0 @@
-# Oxygen Browser Alpha 0.1 GN flags (appended after Helium flags)
-enable_oxygen_core = true
-enable_oxygen_control_center = true
-enable_oxygen_native_theme = true
