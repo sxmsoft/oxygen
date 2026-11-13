@@ -38,8 +38,9 @@ async function detectBrowser(): Promise<string> {
   } catch {
     // high-entropy hints unavailable
   }
-  const real = list.filter((b) => !/not.?a.?brand/i.test(b.brand));
-  if (real.length) return real.map((b) => `${b.brand} ${b.version}`).join(' / ');
+  // Helium reports a "Google Chrome" brand for compatibility; the engine brand is what we show.
+  const chromium = list.find((b) => b.brand === 'Chromium');
+  if (chromium) return `Chromium ${chromium.version}`;
   const m = /Chrome\/([\d.]+)/.exec(navigator.userAgent);
   return m ? `Chromium ${m[1]}` : navigator.userAgent;
 }

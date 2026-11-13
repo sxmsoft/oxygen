@@ -201,7 +201,7 @@
             <div>
               <h2>Oxygen Alpha 0.1</h2>
               <p>
-                Runs on {runtime?.browser ?? 'Helium'} as an extension. Modular customization
+                Runs on Helium ({runtime?.browser ?? 'Chromium'}) as an extension. Modular customization
                 with zero background polling.
               </p>
             </div>
