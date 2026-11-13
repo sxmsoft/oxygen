@@ -13,6 +13,7 @@ import {
 } from '../features/suspender.js';
 import { autosaveSession, getStore, restoreById, rotateOnStartup, saveWorkspace } from '../features/workspaces.js';
 import { applyToAllTabs, applyToTab, forgetTab } from '../features/siteRules.js';
+import { ingestShortcuts } from '../features/shortcuts.js';
 import { openSidePanel, paletteRun, paletteSearch, runCommand, type PaletteItem } from '../features/palette.js';
 
 const EXT_ORIGIN = chrome.runtime.getURL('');
@@ -132,11 +133,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return suspenderStats();
       case 'workspaces:restore':
         return restoreById(String(msg.id));
+      case 'shortcuts:import':
+        return ingestShortcuts(true);
       default:
         return undefined;
     }
   };
-  if (!['palette:search', 'palette:run', 'palette:command', 'palette:openFor', 'suspender:stats', 'workspaces:restore'].includes(msg.type)) {
+  if (!['palette:search', 'palette:run', 'palette:command', 'palette:openFor', 'suspender:stats', 'workspaces:restore', 'shortcuts:import'].includes(msg.type)) {
     return false;
   }
   handle().then(sendResponse, (e) => sendResponse({ ok: false, error: String(e?.message ?? e) }));
@@ -145,6 +148,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 // ---------- Lifecycle & config changes ----------
 async function startAll(): Promise<void> {
+  await ingestShortcuts().catch(() => {});
   await syncSidePanel();
   await reconcileSuspender();
   await applyToAllTabs();
@@ -186,6 +190,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   openPaletteFor: async (tabId: number) => openPaletteFor(await chrome.tabs.get(tabId)),
   commands: () => chrome.commands.getAll(),
   lastPaletteError: () => lastPaletteError,
+  ingestShortcuts,
   explainSuspend: async (now = Date.now()) => {
     const cfg = await featureConfig<SuspenderConfig>('tab-suspender');
     return (await chrome.tabs.query({})).map((t) => ({ id: t.id, url: t.url, status: t.status, ...suspendDecision(t, cfg, now) }));

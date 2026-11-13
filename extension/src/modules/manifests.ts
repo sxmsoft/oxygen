@@ -130,4 +130,5 @@ export const STORAGE_KEYS = {
   layout: 'oxygen.newtab.layout',
   suspenderStats: 'oxygen.suspender.stats',
   weatherCache: 'oxygen.weather.cache',
+  shortcutsImport: 'oxygen.import.shortcuts',
 } as const;
