@@ -16,6 +16,8 @@
     "../sdk/src/**/*.ts",
     "./src/**/*.ts",
     "./tests/**/*.ts",
-    "../modules/core-theme-obsidian/src/**/*.ts"
+    "../modules/core-theme-obsidian/src/**/*.ts",
+    "../extension/src/logic/**/*.ts",
+    "../extension/src/modules/**/*.ts"
   ]
 }

@@ -1,0 +1,5 @@
+{
+  "name": "@oxygen-browser/extension-src",
+  "private": true,
+  "type": "module"
+}

@@ -6,7 +6,13 @@ export type OxygenPermission =
   | 'ui:tabstrip'
   | 'ui:omnibox'
   | 'perf:read'
-  | 'storage:local';
+  | 'storage:local'
+  | 'tabs:manage'
+  | 'sessions'
+  | 'sites:inject'
+  | 'ui:newtab'
+  | 'ui:sidepanel'
+  | 'ui:palette';
 
 export type ModuleCategory = 'core' | 'user';
 

@@ -1,4 +1,3 @@
-/// <reference path="./chrome.d.ts" />
 import type { ThemeTokens } from '../../sdk/src/types.js';
 import type { NativeBridge } from '../../oxygen-core/src/NativeBridge.js';
 

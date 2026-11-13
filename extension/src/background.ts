@@ -1,4 +1,3 @@
-/// <reference path="./chrome.d.ts" />
 import {
   OXYGEN_CONFIG_STORAGE_KEY,
   isConfigBundle,
@@ -121,7 +120,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 /** Opens the Control Center (action button, `ox` keyword). */
 export async function openControlCenter(
   section: string = 'dashboard',
-  disposition: chrome.omnibox.OnInputEnteredDisposition = 'newForegroundTab'
+  disposition: `${chrome.omnibox.OnInputEnteredDisposition}` = 'newForegroundTab'
 ): Promise<void> {
   const url = chrome.runtime.getURL(`index.html#${parseSection(section) ?? 'dashboard'}`);
   if (disposition === 'currentTab') await chrome.tabs.update({ url });

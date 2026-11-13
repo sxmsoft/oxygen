@@ -1,4 +1,3 @@
-/// <reference path="../../../extension/src/chrome.d.ts" />
 import type { OxygenCore } from '../../../oxygen-core/src/OxygenCore.js';
 import { ChromeStorageAdapter } from '../../../oxygen-core/src/ChromeStorageAdapter.js';
 import { ExtensionBridge, isExtensionContext } from '../../../extension/src/bridge.js';
@@ -65,7 +64,7 @@ export async function createEnvironment(): Promise<OxygenEnvironment> {
         void chrome.storage.local
           .get(THEME_PACK_STATUS_KEY)
           .then((r) => cb((r[THEME_PACK_STATUS_KEY] as ThemePackStatus) ?? null));
-        const listener: chrome.storage.ChangeListener = (changes, area) => {
+        const listener = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
           if (area === 'local' && THEME_PACK_STATUS_KEY in changes) {
             cb((changes[THEME_PACK_STATUS_KEY].newValue as ThemePackStatus) ?? null);
           }

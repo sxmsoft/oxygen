@@ -14,7 +14,15 @@ const USER_ALLOWED_PERMISSIONS = new Set<OxygenPermission>([
   'storage:local',
 ]);
 
-const CORE_ONLY_PERMISSIONS = new Set<OxygenPermission>(['ui:omnibox']);
+const CORE_ONLY_PERMISSIONS = new Set<OxygenPermission>([
+  'ui:omnibox',
+  'tabs:manage',
+  'sessions',
+  'sites:inject',
+  'ui:newtab',
+  'ui:sidepanel',
+  'ui:palette',
+]);
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]{2,63}$/;
 const SEMVER_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-[a-zA-Z0-9.-]+)?$/;
