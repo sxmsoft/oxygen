@@ -8,7 +8,7 @@
   import {
     addWidget, layoutHeight, moveWidget, parseLayout, removeWidget, resizeWidget, updateWidgetSettings, GRID_COLUMNS, type Layout,
   } from '../../../extension/src/logic/layout.js';
-  import { WIDGETS, defaultLayout, defaultSettings, widgetDef } from './widgets';
+  import { ADDED_WIDGETS, WIDGETS, defaultLayout, defaultSettings, widgetDef } from './widgets';
   import WidgetHost from './WidgetHost.svelte';
   import Wallpaper from './Wallpaper.svelte';
   import { putMedia, deleteMedia } from './wallpaperStore';
@@ -59,6 +59,23 @@
   function commit(next: Layout) {
     stored.set(JSON.parse(JSON.stringify(next)));
   }
+
+  // Layouts saved before a widget type existed get it once (e.g. the bookmarks bar).
+  let migrated = false;
+  $effect(() => {
+    if (!stored.ready || migrated || typeof chrome === 'undefined' || !chrome.storage) return;
+    migrated = true;
+    const saved = parseLayout(stored.value, WIDGETS);
+    void chrome.storage.local.get(ADDED_WIDGETS.map((a) => a.flag)).then((flags) => {
+      let next = saved;
+      for (const a of ADDED_WIDGETS) {
+        if (flags[a.flag]) continue;
+        if (next && !next.some((w) => w.type === a.type)) next = addWidget(next, a.type, WIDGETS, `w-${a.type}`, defaultSettings(a.type));
+        void chrome.storage.local.set({ [a.flag]: true });
+      }
+      if (next && next !== saved) commit(next);
+    });
+  });
   const pos = (p: { x: number; y: number; w: number; h: number }) =>
     `left:${p.x * (colW + GAP)}px;top:${p.y * (rowH + GAP)}px;width:${p.w * colW + (p.w - 1) * GAP}px;height:${p.h * rowH + (p.h - 1) * GAP}px`;
 

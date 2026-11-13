@@ -1,6 +1,6 @@
 <script lang="ts">
   import { i18n } from '../lib/i18n.svelte';
-  import { StoredValue } from '../lib/kv.svelte';
+  import { StoredValue, importFromHelium, type QuickLink } from '../lib/kv.svelte';
   import { exportWorkspaces, parseStore, parseWorkspacesImport, mergeImported, removeWorkspace, tabCount, type Workspace } from '../../../extension/src/logic/workspace.js';
   import { capture } from '../../../extension/src/features/workspaces.js';
   import { makeWorkspace, upsertWorkspace } from '../../../extension/src/logic/workspace.js';
@@ -13,6 +13,9 @@
   let importText = $state('');
   let msg = $state('');
   let exported = $state('');
+  let heliumMsg = $state('');
+  const links = new StoredValue<QuickLink[]>('oxygen.links', []);
+  const heliumLinks = $derived(links.value.filter((l) => l.source === 'helium'));
 
   async function save(all: boolean) {
     const win = all ? undefined : (await chrome.windows.getLastFocused({ windowTypes: ['normal'] })).id;
@@ -90,6 +93,16 @@
         {#if msg}<p class="subtitle" data-testid="ws-import-msg">{msg}</p>{/if}
       </div>
     </div>
+  </article>
+  <article class="card" data-testid="cc-helium-import">
+    <h2>{t('cc.importTitle')}</h2>
+    <p class="subtitle">{t('cc.importBody')}</p>
+    <div class="ox-row wrap">
+      <button class="ox-btn primary" onclick={async () => (heliumMsg = await importFromHelium(t))} data-testid="cc-helium-import-btn">{t('links.import')}</button>
+      <button class="ox-btn ghost" onclick={() => chrome.tabs.create({ url: 'chrome://bookmarks/' })}>{t('bm.manage')}</button>
+    </div>
+    {#if heliumMsg}<p class="subtitle" data-testid="cc-helium-import-msg">{heliumMsg}</p>{/if}
+    {#if heliumLinks.length}<p class="subtitle">{heliumLinks.map((l) => l.title).join(' · ')}</p>{/if}
   </article>
 </section>
 

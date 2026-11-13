@@ -2,7 +2,9 @@
   import { onMount } from 'svelte';
   import type { OxygenEnvironment } from '../lib/env';
   import { i18n } from '../lib/i18n.svelte';
-  import { StoredValue, favicon, hostLabel, normalizeUrl, type QuickLink } from '../lib/kv.svelte';
+  import { StoredValue, favicon, hostLabel, importFromHelium, normalizeUrl, type QuickLink } from '../lib/kv.svelte';
+  import BookmarkTree from '../lib/BookmarkTree.svelte';
+  import { BookmarkBar } from '../lib/bookmarks.svelte';
   import { moduleCfg, moduleOn } from '../lib/modules';
   import { renderMarkdown } from '../../../extension/src/logic/markdown.js';
   import { matchScore } from '../../../extension/src/logic/search.js';
@@ -18,7 +20,16 @@
   const enabled = $derived(track(rev, moduleOn(core, 'side-panel')));
   const showGroups = $derived(track(rev, moduleCfg<{ showGroups: boolean }>(core, 'side-panel').showGroups !== false));
 
-  let tab = $state<'tabs' | 'notes' | 'links'>('tabs');
+  let tab = $state<'tabs' | 'bookmarks' | 'notes' | 'links'>('tabs');
+  const bookmarks = new BookmarkBar(true);
+  let importStatus = $state('');
+  /** side panel links open in the current tab; Ctrl/Cmd/middle-click keeps the new-tab default */
+  function openHere(url: string, e: MouseEvent) {
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) return;
+    e.preventDefault();
+    if (active?.id !== undefined) void chrome.tabs.update(active.id, { url });
+    else void chrome.tabs.create({ url });
+  }
   let tabs = $state<chrome.tabs.Tab[]>([]);
   let groups = $state<chrome.tabGroups.TabGroup[]>([]);
   let windowId = $state<number | undefined>(undefined);
@@ -51,6 +62,7 @@
   onMount(() => {
     const off = env.onExternalChange(() => rev++);
     void refresh();
+    const offBm = bookmarks.watch();
     const evs = [
       chrome.tabs.onCreated, chrome.tabs.onRemoved, chrome.tabs.onUpdated, chrome.tabs.onMoved, chrome.tabs.onActivated,
       chrome.tabs.onAttached, chrome.tabs.onDetached, chrome.tabs.onReplaced,
@@ -59,6 +71,7 @@
     for (const ev of evs) ev.addListener(soon);
     return () => {
       off();
+      offBm();
       for (const ev of evs) ev.removeListener(soon);
     };
   });
@@ -115,6 +128,7 @@
   {:else}
     <nav class="tabs-nav">
       <button class:on={tab === 'tabs'} onclick={() => (tab = 'tabs')} data-testid="sp-tab-tabs">{t('side.tabs')} <span class="n">{tabs.length}</span></button>
+      <button class:on={tab === 'bookmarks'} onclick={() => (tab = 'bookmarks')} data-testid="sp-tab-bookmarks">{t('side.bookmarks')}</button>
       <button class:on={tab === 'notes'} onclick={() => (tab = 'notes')} data-testid="sp-tab-notes">{t('side.notes')}</button>
       <button class:on={tab === 'links'} onclick={() => (tab = 'links')} data-testid="sp-tab-links">{t('side.links')}</button>
     </nav>
@@ -182,6 +196,15 @@
           <textarea class="ox-textarea area" data-testid="sp-notes" placeholder={t('notes.placeholder')} value={notes.value} oninput={(e) => notes.set((e.target as HTMLTextAreaElement).value, 400)}></textarea>
         {/if}
       </div>
+    {:else if tab === 'bookmarks'}
+      <div class="list ox-scroll" data-testid="sp-bookmarks">
+        {#if bookmarks.items.length}
+          <BookmarkTree nodes={bookmarks.items} {t} onopen={openHere} />
+        {:else if bookmarks.ready}
+          <p class="ox-muted">{t('bm.empty')}</p>
+        {/if}
+      </div>
+      <button class="ox-btn small ghost" onclick={() => chrome.tabs.create({ url: 'chrome://bookmarks/' })}>{t('bm.manage')}</button>
     {:else}
       <form class="link-form" onsubmit={addLink}>
         <input class="ox-input" placeholder={t('links.title')} bind:value={linkTitle} />
@@ -198,6 +221,8 @@
           <li class="ox-muted">{t('links.empty')}</li>
         {/each}
       </ul>
+      <button class="ox-btn small ghost" data-testid="sp-links-import" onclick={async () => (importStatus = await importFromHelium(t))}>{t('links.import')}</button>
+      {#if importStatus}<p class="ox-muted">{importStatus}</p>{/if}
     {/if}
   {/if}
 </div>

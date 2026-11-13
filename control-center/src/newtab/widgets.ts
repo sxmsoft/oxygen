@@ -47,6 +47,11 @@ export const WIDGETS: WidgetDef[] = [
     load: () => import('./widgets/Links.svelte'),
   },
   {
+    type: 'bookmarks', title: 'w.bookmarks', icon: '★', defaultW: 12, defaultH: 2, minW: 4, minH: 1, maxH: 8,
+    settings: [{ key: 'showAll', label: 'w.bookmarks.all', type: 'boolean', default: true }],
+    load: () => import('./widgets/Bookmarks.svelte'),
+  },
+  {
     type: 'recent', title: 'w.recent', icon: '↺', defaultW: 4, defaultH: 3, minW: 3, minH: 2, maxH: 8,
     settings: [
       { key: 'mode', label: 'w.recent.mode', type: 'select', default: 'closed', options: [{ value: 'closed', label: 'w.recent.closed' }, { value: 'visited', label: 'w.recent.visited' }] },
@@ -73,14 +78,18 @@ export function defaultSettings(type: string): Record<string, unknown> {
   return Object.fromEntries((widgetDef(type)?.settings ?? []).map((s) => [s.key, s.default]));
 }
 
+/** Widgets added to layouts saved before they existed (once; removing them afterwards sticks). */
+export const ADDED_WIDGETS: { type: string; flag: string }[] = [{ type: 'bookmarks', flag: 'oxygen.newtab.added.bookmarks' }];
+
 export function defaultLayout(locale: string): Layout {
   const city = locale === 'tr' ? 'İstanbul' : '';
   return [
     { id: 'w-search', type: 'search', x: 2, y: 0, w: 8, h: 1, settings: {} },
-    { id: 'w-clock', type: 'clock', x: 0, y: 1, w: 4, h: 2, settings: defaultSettings('clock') },
-    { id: 'w-weather', type: 'weather', x: 4, y: 1, w: 4, h: 2, settings: { ...defaultSettings('weather'), city } },
-    { id: 'w-workspaces', type: 'workspaces', x: 8, y: 1, w: 4, h: 2, settings: {} },
-    { id: 'w-links', type: 'links', x: 0, y: 3, w: 8, h: 2, settings: {} },
-    { id: 'w-recent', type: 'recent', x: 8, y: 3, w: 4, h: 3, settings: defaultSettings('recent') },
+    { id: 'w-links', type: 'links', x: 0, y: 1, w: 8, h: 2, settings: {} },
+    { id: 'w-clock', type: 'clock', x: 8, y: 1, w: 4, h: 2, settings: defaultSettings('clock') },
+    { id: 'w-bookmarks', type: 'bookmarks', x: 0, y: 3, w: 8, h: 2, settings: defaultSettings('bookmarks') },
+    { id: 'w-weather', type: 'weather', x: 8, y: 3, w: 4, h: 2, settings: { ...defaultSettings('weather'), city } },
+    { id: 'w-workspaces', type: 'workspaces', x: 0, y: 5, w: 4, h: 2, settings: {} },
+    { id: 'w-recent', type: 'recent', x: 4, y: 5, w: 4, h: 3, settings: defaultSettings('recent') },
   ];
 }

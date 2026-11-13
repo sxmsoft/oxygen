@@ -1,6 +1,10 @@
 <script lang="ts">
-  import { StoredValue, favicon, hostLabel, normalizeUrl, type QuickLink } from '../../lib/kv.svelte';
-  let { t, editing }: { t: (k: string) => string; editing: boolean } = $props();
+  import { StoredValue, favicon, hostLabel, importFromHelium, normalizeUrl, type QuickLink } from '../../lib/kv.svelte';
+  let { t, editing }: { t: (k: string, p?: Record<string, string | number>) => string; editing: boolean } = $props();
+  let status = $state('');
+  async function doImport() {
+    status = await importFromHelium(t);
+  }
   const links = new StoredValue<QuickLink[]>('oxygen.links', []);
   let adding = $state(false);
   let title = $state('');
@@ -36,8 +40,10 @@
       <div class="ox-row"><button class="ox-btn small primary">{t('common.add')}</button><button type="button" class="ox-btn small ghost" onclick={() => (adding = false)}>{t('common.cancel')}</button></div>
     </form>
   {:else}
+    {#if editing}<button class="tile add" onclick={doImport} data-testid="links-import"><span class="fav">⇩</span><span class="name">{t('links.import')}</span></button>{/if}
     <button class="tile add" onclick={() => (adding = true)} aria-label={t('common.add')}><span class="fav">+</span><span class="name">{t('common.add')}</span></button>
   {/if}
+  {#if status}<p class="status ox-muted" data-testid="links-import-status">{status}</p>{/if}
 </div>
 
 <style>
@@ -48,5 +54,6 @@
   .fav { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--ox-text) 8%, transparent); font-size: 20px; color: var(--ox-muted); }
   .name { font-size: 12px; max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .rm { position: absolute; top: 2px; right: 2px; }
+  .status { grid-column: 1 / -1; margin: 0; font-size: 12px; }
   .add-form { grid-column: span 3; display: flex; flex-direction: column; gap: 6px; }
 </style>
