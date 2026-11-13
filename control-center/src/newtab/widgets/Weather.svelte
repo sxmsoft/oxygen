@@ -25,13 +25,23 @@
       return;
     }
     const key = `${city.trim().toLowerCase()}|${unit}|${locale}`;
-    const cache = ((await chrome.storage.local.get(CACHE_KEY))[CACHE_KEY] ?? {}) as Record<string, Weather>;
+    const readCache = async () => ((await chrome.storage.local.get(CACHE_KEY))[CACHE_KEY] ?? {}) as Record<string, Weather>;
+    let cache = await readCache();
     if (cache[key] && Date.now() - cache[key].at < TTL) {
       data = cache[key];
       return;
     }
     loading = true;
+    // One fetch for all open new tabs: the first takes the lock, the others then
+    // find its fresh result in the cache.
+    const locked = (f: () => Promise<void>): Promise<void> => (navigator.locks ? (navigator.locks.request('oxygen-weather', f) as Promise<void>) : f());
     try {
+      await locked(async () => {
+      cache = await readCache();
+      if (cache[key] && Date.now() - cache[key].at < TTL) {
+        data = cache[key];
+        return;
+      }
       const geo = await fetch(`https://geocoding-api.open-meteo.com/v1/search?count=1&language=${locale}&name=${encodeURIComponent(city.trim())}`).then((r) => r.json());
       const g = geo?.results?.[0];
       if (!g) throw new Error('not found');
@@ -57,6 +67,7 @@
       };
       data = w;
       await chrome.storage.local.set({ [CACHE_KEY]: { ...cache, [key]: w } });
+      });
     } catch {
       error = t('w.weather.error');
       data = null;

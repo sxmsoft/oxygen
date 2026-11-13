@@ -5,12 +5,14 @@ import { createEnvironment, type OxygenEnvironment } from './env';
 import { applyTokensToDocument } from './theme';
 import { i18n } from './i18n.svelte';
 import { healStaleServiceWorker } from '../../../extension/src/features/swHeal.js';
+import { applyPerfToDocument } from './perf.svelte';
 
 /** Shared bootstrap for Oxygen pages: config core, theme tokens, language. */
 export async function bootPage(App: Component<{ env: OxygenEnvironment }>): Promise<void> {
   const env = await createEnvironment();
   await env.core.init();
   applyTokensToDocument(env.core.getActiveThemeTokens());
+  applyPerfToDocument();
   i18n.sync(env.core);
   env.onExternalChange(() => {
     applyTokensToDocument(env.core.getActiveThemeTokens());

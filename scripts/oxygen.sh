@@ -191,6 +191,7 @@ cmd_verify() {
   "${LOWPRIO[@]}" node "${ROOT_DIR}/tests/e2e/verify_import.mjs" --binary "$(helium_bin)" "$@"
   "${LOWPRIO[@]}" node "${ROOT_DIR}/tests/e2e/verify_upgrade.mjs" --binary "$(helium_bin)" "$@"
   "${LOWPRIO[@]}" node "${ROOT_DIR}/tests/e2e/verify_layout.mjs" --binary "$(helium_bin)" "$@"
+  "${LOWPRIO[@]}" node "${ROOT_DIR}/tests/e2e/verify_perf.mjs" --binary "$(helium_bin)" "$@"
 }
 
 cmd_run() {

@@ -5,6 +5,8 @@ export class StoredValue<T> {
   ready = $state(false);
   #key: string;
   #timer: ReturnType<typeof setTimeout> | undefined;
+  /** JSON of the value last seen in storage: no write (and no echo) when nothing changed */
+  #stored = '';
 
   constructor(key: string, initial: T) {
     this.#key = key;
@@ -14,13 +16,18 @@ export class StoredValue<T> {
       return;
     }
     void chrome.storage.local.get(key).then((r) => {
-      if (r[key] !== undefined) this.value = r[key] as T;
+      if (r[key] !== undefined) {
+        this.value = r[key] as T;
+        this.#stored = JSON.stringify(r[key]);
+      }
       this.ready = true;
     });
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === 'local' && key in changes && changes[key].newValue !== undefined) {
-        this.value = changes[key].newValue as T;
-      }
+      if (area !== 'local' || !(key in changes) || changes[key].newValue === undefined) return;
+      const json = JSON.stringify(changes[key].newValue);
+      if (json === this.#stored) return; // our own write coming back, or a no-op
+      this.#stored = json;
+      this.value = changes[key].newValue as T;
     });
   }
 
@@ -28,7 +35,13 @@ export class StoredValue<T> {
   set(v: T, debounceMs = 0): void {
     this.value = v;
     clearTimeout(this.#timer);
-    const write = () => chrome.storage?.local.set({ [this.#key]: $state.snapshot(this.value) });
+    const write = () => {
+      const v = $state.snapshot(this.value);
+      const json = JSON.stringify(v);
+      if (json === this.#stored || !chrome.storage) return;
+      this.#stored = json;
+      return chrome.storage.local.set({ [this.#key]: v });
+    };
     if (debounceMs) this.#timer = setTimeout(write, debounceMs);
     else void write();
   }

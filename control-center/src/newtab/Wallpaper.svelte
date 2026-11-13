@@ -2,6 +2,9 @@
   import { onMount } from 'svelte';
   import { getMedia, MEDIA_STAMP_KEY } from './wallpaperStore';
   import { createParticles, type Scene } from './particles';
+  import { createAurora } from './aurora';
+  import { perf } from '../lib/perf.svelte';
+  import { WALLPAPER_IDLE_MS } from '../../../extension/src/logic/perf.js';
 
   let { cfg, accent }: { cfg: Record<string, unknown>; accent: string } = $props();
   const kind = $derived(String(cfg.kind ?? 'none'));
@@ -11,7 +14,11 @@
   let canvas = $state<HTMLCanvasElement | null>(null);
   let hidden = $state(document.hidden);
   let reduced = $state(matchMedia('(prefers-reduced-motion: reduce)').matches);
-  const animate = $derived(!hidden && !reduced);
+  let focused = $state(document.hasFocus());
+  let idle = $state(false);
+  // Animated wallpapers run only while the tab is visible, the window focused,
+  // the user active, and performance mode off.
+  const animate = $derived(!hidden && !reduced && focused && !idle && !perf.lite);
   let stamp = $state(0);
 
   onMount(() => {
@@ -20,6 +27,22 @@
     const onVis = () => (hidden = document.hidden);
     mq.addEventListener('change', onMq);
     document.addEventListener('visibilitychange', onVis);
+    const onFocus = () => (focused = true);
+    const onBlur = () => (focused = false);
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+    let lastPoke = 0;
+    const poke = () => {
+      const now = Date.now();
+      if (!idle && now - lastPoke < 1000) return; // cheap on pointermove
+      lastPoke = now;
+      idle = false;
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => (idle = true), WALLPAPER_IDLE_MS);
+    };
+    poke();
+    addEventListener('focus', onFocus);
+    addEventListener('blur', onBlur);
+    for (const e of ['pointermove', 'pointerdown', 'keydown', 'wheel']) addEventListener(e, poke, { passive: true });
     const onStore = (c: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (area === 'local' && MEDIA_STAMP_KEY in c) stamp++;
     };
@@ -28,6 +51,10 @@
       mq.removeEventListener('change', onMq);
       document.removeEventListener('visibilitychange', onVis);
       chrome.storage?.onChanged.removeListener(onStore);
+      removeEventListener('focus', onFocus);
+      removeEventListener('blur', onBlur);
+      for (const e of ['pointermove', 'pointerdown', 'keydown', 'wheel']) removeEventListener(e, poke);
+      clearTimeout(idleTimer);
     };
   });
 
@@ -59,11 +86,12 @@
     else video.pause();
   });
 
-  // Particles scene.
+  // Canvas scenes (particles, aurora).
   let scene = $state.raw<Scene | null>(null);
   $effect(() => {
-    if (kind !== 'particles' || !canvas) return;
-    scene = createParticles(canvas, '#e8ecf3', accent);
+    if ((kind !== 'particles' && kind !== 'aurora') || !canvas) return;
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--ox-bg').trim() || '#07080b';
+    scene = kind === 'aurora' ? createAurora(canvas, /^#[0-9a-f]{6}$/i.test(bg) ? bg : '#07080b', accent) : createParticles(canvas, '#e8ecf3', accent);
     return () => {
       scene?.destroy();
       scene = null;
@@ -92,15 +120,11 @@
 </script>
 
 <div class="wallpaper" data-testid="wallpaper" data-kind={kind} data-playing={String(playing)} data-reduced={String(reduced)} aria-hidden="true">
-  <div class="media" style="background:{background};filter:{blur ? `blur(${blur}px)` : 'none'};transform:{blur ? 'scale(1.06)' : 'none'}">
+  <div class="media" style="background:{background};filter:{blur && !perf.lite ? `blur(${blur}px)` : 'none'};transform:{blur && !perf.lite ? 'scale(1.06)' : 'none'}">
     {#if kind === 'video' && videoUrl}
       <video bind:this={video} src={videoUrl} muted loop playsinline autoplay={animate} disablepictureinpicture></video>
-    {:else if kind === 'aurora'}
-      <div class="aurora" class:paused={!animate} style="--a:{accent}">
-        <span class="b1"></span><span class="b2"></span><span class="b3"></span>
-      </div>
-    {:else if kind === 'particles'}
-      <canvas bind:this={canvas}></canvas>
+    {:else if kind === 'aurora' || kind === 'particles'}
+      <canvas bind:this={canvas} class:aurora={kind === 'aurora'}></canvas>
     {/if}
   </div>
   <div class="dim" style="background:rgba(0,0,0,{dim / 100})"></div>
@@ -110,15 +134,5 @@
   .wallpaper { position: fixed; inset: 0; z-index: 0; overflow: hidden; background: var(--ox-bg); }
   .media, .dim { position: absolute; inset: 0; }
   video, canvas { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .aurora { position: absolute; inset: -20%; background: radial-gradient(ellipse at 50% 120%, color-mix(in srgb, var(--a) 10%, transparent), transparent 60%), var(--ox-bg); }
-  .aurora span { position: absolute; width: 60vmax; height: 60vmax; border-radius: 50%; filter: blur(90px); opacity: 0.45; animation: drift 38s ease-in-out infinite alternate; will-change: transform; }
-  .b1 { background: #3b5bdb; top: 0%; left: 5%; }
-  .b2 { background: #0ca678; top: 30%; left: 45%; animation-duration: 46s !important; animation-delay: -12s !important; opacity: 0.3 !important; }
-  .b3 { background: color-mix(in srgb, var(--a) 70%, #9c36b5); top: 45%; left: 0%; animation-duration: 54s !important; animation-delay: -25s !important; opacity: 0.32 !important; }
-  .aurora.paused span { animation-play-state: paused; }
-  @keyframes drift {
-    0% { transform: translate3d(0, 0, 0) scale(1); }
-    50% { transform: translate3d(12vw, -6vh, 0) scale(1.15); }
-    100% { transform: translate3d(-8vw, 8vh, 0) scale(0.95); }
-  }
+  canvas.aurora { image-rendering: auto; }
 </style>

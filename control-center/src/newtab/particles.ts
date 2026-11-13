@@ -1,4 +1,6 @@
-/** Lightweight animated particle field (≤ 70 dots, 30 fps cap, DPR ≤ 1.5). */
+import { WALLPAPER_FPS } from '../../../extension/src/logic/perf.js';
+
+/** Lightweight animated particle field (≤ 70 dots, WALLPAPER_FPS cap, DPR ≤ 1.5). */
 export interface Scene {
   start(): void;
   stop(): void;
@@ -34,7 +36,7 @@ export function createParticles(canvas: HTMLCanvasElement, color: string, accent
   };
   const loop = (ts: number) => {
     raf = requestAnimationFrame(loop);
-    if (ts - last < 33) return;
+    if (ts - last < 1000 / WALLPAPER_FPS - 1) return;
     draw(Math.min(100, ts - last || 16));
     last = ts;
   };

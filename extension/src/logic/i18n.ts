@@ -216,6 +216,14 @@ const en = {
   'icon.refresh': 'Fetch a sharper icon',
   'links.remove': 'Remove',
   'links.dragHint': 'Drag tiles to reorder. Click ✎ to edit.',
+  'perf.title': 'Performance',
+  'perf.mode': 'Performance mode',
+  'perf.auto': 'Auto',
+  'perf.on': 'On',
+  'perf.off': 'Off',
+  'perf.liteOn': 'On: animated wallpapers are paused and blur effects are off.',
+  'perf.liteOff': 'Off: animated wallpapers run (30 fps, paused when hidden, unfocused or idle).',
+  'perf.glass': 'Frosted glass (blur behind cards)',
 };
 
 export type MessageKey = keyof typeof en;
@@ -434,6 +442,14 @@ const tr: Record<MessageKey, string> = {
   'icon.refresh': 'Daha net ikon getir',
   'links.remove': 'Kaldır',
   'links.dragHint': 'Sıralamak için kutucukları sürükle. Düzenlemek için ✎.',
+  'perf.title': 'Performans',
+  'perf.mode': 'Performans modu',
+  'perf.auto': 'Otomatik',
+  'perf.on': 'Açık',
+  'perf.off': 'Kapalı',
+  'perf.liteOn': 'Açık: hareketli duvar kâğıtları duraklatıldı, bulanıklık efektleri kapalı.',
+  'perf.liteOff': 'Kapalı: hareketli duvar kâğıtları çalışır (30 fps; gizli, odaksız ya da boştayken durur).',
+  'perf.glass': 'Buzlu cam (kartların arkasını bulanıklaştır)',
 };
 
 /** Turkish labels for module config fields (English falls back to the schema label). */

@@ -435,7 +435,14 @@ try {
     // ---- wallpapers
     const wp = () => cdp.evaluate(S, `(() => { const w = document.querySelector('[data-testid=wallpaper]'); return w && { kind: w.dataset.kind, playing: w.dataset.playing, reduced: w.dataset.reduced, bg: w.querySelector('.media').style.background.slice(0, 40), video: !!w.querySelector('video'), paused: w.querySelector('video')?.paused ?? null }; })()`);
     const w0 = await wp();
-    check('default animated wallpaper (aurora) plays while visible', w0.kind === 'aurora' && w0.playing === 'true', JSON.stringify(w0));
+    check('default wallpaper is a static gradient', w0.kind === 'gradient' && w0.playing === 'false', JSON.stringify(w0));
+    await setModule('wallpapers', { kind: 'aurora' });
+    const lite = await cdp.waitFor(S, `(() => { const w = document.querySelector('[data-testid=wallpaper]'); return w?.dataset.kind === 'aurora' && document.documentElement.dataset.perf + '/' + w.dataset.playing; })()`);
+    check('performance mode (auto, <= 8 GB) keeps aurora static', lite === 'lite/false', lite);
+    await ev(`chrome.storage.local.set({ 'oxygen.perf': { mode: 'off', glass: false } })`);
+    await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }, S);
+    const pl = await cdp.waitFor(S, `document.querySelector('[data-testid=wallpaper]')?.dataset.playing === 'true'`);
+    check('aurora animates with performance mode off (visible + focused)', pl);
     await shot(S, '10-newtab-widgets-aurora.png');
     await setModule('wallpapers', { kind: 'gradient', color1: '#1b2a4a', color2: '#5b2a6e', angle: 135 });
     const wg = await cdp.waitFor(S, `document.querySelector('[data-testid=wallpaper]')?.dataset.kind === 'gradient' && document.querySelector('[data-testid=wallpaper] .media').style.background`);
@@ -480,8 +487,8 @@ try {
       const red = await cdp.waitFor(S, `(() => { const w = document.querySelector('[data-testid=wallpaper]'); return w.dataset.reduced === 'true' && w.querySelector('video').paused && w.dataset.playing; })()`);
       check('prefers-reduced-motion pauses the live wallpaper', red === 'false', red);
       await setModule('wallpapers', { kind: 'aurora' });
-      const ar = await cdp.waitFor(S, `(() => { const a = document.querySelector('[data-testid=wallpaper] .aurora'); return a && a.classList.contains('paused') && getComputedStyle(a.querySelector('span')).animationPlayState; })()`);
-      check('reduced motion pauses CSS animation too', ar === 'paused', ar);
+      const ar = await cdp.waitFor(S, `(() => { const w = document.querySelector('[data-testid=wallpaper]'); return w.dataset.kind === 'aurora' && w.querySelector('canvas') && w.dataset.playing; })()`);
+      check('reduced motion pauses the aurora too', ar === 'false', ar);
       await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] }, S);
     } else check('video wallpaper', false, 'no test video');
     await setModule('wallpapers', { kind: 'particles' });

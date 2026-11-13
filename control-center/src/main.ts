@@ -4,6 +4,9 @@ import './app.css';
 import './lib/ui.css';
 import './cc/cc.css';
 import { createEnvironment } from './lib/env';
+import { applyPerfToDocument } from './lib/perf.svelte';
+
+applyPerfToDocument();
 
 void createEnvironment().then((env) => {
   mount(App, {

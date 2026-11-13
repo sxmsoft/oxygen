@@ -90,8 +90,17 @@
     start = { x: e.clientX, y: e.clientY, moved: false };
     order = links.value;
   }
+  let raf = 0;
+  let last = { x: 0, y: 0 };
   function move(e: PointerEvent) {
     if (!dragId || !order) return;
+    last = { x: e.clientX, y: e.clientY };
+    if (!raf) raf = requestAnimationFrame(applyMove);
+  }
+  function applyMove() {
+    raf = 0;
+    if (!dragId || !order) return;
+    const e = { clientX: last.x, clientY: last.y };
     if (!start.moved && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 5) return;
     start.moved = true;
     const el = document.elementsFromPoint(e.clientX, e.clientY).find((n) => n instanceof HTMLElement && n.dataset.linkId && n.dataset.linkId !== dragId) as HTMLElement | undefined;
@@ -101,10 +110,12 @@
     const after = e.clientX > r.left + r.width / 2;
     const list = order.filter((l) => l.id !== dragId);
     const idx = list.findIndex((l) => l.id === target) + (after ? 1 : 0);
-    order = moveLink(order, dragId, list[idx]?.id ?? null);
+    const next = moveLink(order, dragId, list[idx]?.id ?? null);
+    if (next.some((l, i) => l.id !== order![i].id)) order = next;
   }
   function up() {
     if (!dragId) return;
+    if (raf) cancelAnimationFrame(raf), (raf = 0), applyMove();
     if (order && start.moved) links.set(order);
     else {
       const l = links.value.find((x) => x.id === dragId);

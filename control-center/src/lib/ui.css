@@ -44,9 +44,15 @@
   background: color-mix(in srgb, var(--ox-surface) 72%, transparent);
   border: 1px solid color-mix(in srgb, var(--ox-border) 85%, transparent);
   border-radius: calc(var(--ox-radius) + 4px);
+}
+/* Frosted glass re-blurs everything behind a card on every frame the background
+   changes; it is opt-in (Customize -> Performance) and never on in performance mode. */
+:root[data-glass='off'] .ox-glass { background: color-mix(in srgb, var(--ox-surface) 88%, transparent); }
+:root[data-glass='on'] .ox-glass {
   backdrop-filter: blur(18px) saturate(1.15);
   -webkit-backdrop-filter: blur(18px) saturate(1.15);
 }
+:root[data-perf='lite'] *, :root[data-perf='lite'] *::before, :root[data-perf='lite'] *::after { transition: none !important; animation: none !important; }
 .ox-md h1, .ox-md h2, .ox-md h3 { margin: .3em 0 .2em; font-size: 1.05em; }
 .ox-md p { margin: .25em 0; }
 .ox-md ul, .ox-md ol { margin: .25em 0; padding-left: 1.3em; }

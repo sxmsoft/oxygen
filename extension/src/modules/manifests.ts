@@ -88,7 +88,7 @@ export const wallpaperManifest: OxygenModuleManifest = {
     kind: {
       type: 'enum',
       label: 'Wallpaper',
-      default: 'aurora',
+      default: 'gradient',
       options: ['none', 'solid', 'gradient', 'image', 'video', 'aurora', 'particles'],
     },
     color1: { type: 'color', label: 'Color 1', default: '#13161C' },

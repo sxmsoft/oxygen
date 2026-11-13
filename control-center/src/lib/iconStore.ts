@@ -99,24 +99,43 @@ async function fetchWithTimeout(url: string, ms = 6000): Promise<Response | null
 }
 
 const inflight = new Map<string, Promise<string | null>>();
+/** results for this page's lifetime (no IndexedDB read per tile re-render) */
+const memo = new Map<string, string | null>();
+// At most 2 site requests at a time (a new tab with many links must not burst).
+let active = 0;
+const waiting: (() => void)[] = [];
+async function slot<T>(f: () => Promise<T>): Promise<T> {
+  if (active >= 2) await new Promise<void>((r) => waiting.push(r));
+  active++;
+  try {
+    return await f();
+  } finally {
+    active--;
+    waiting.shift()?.();
+  }
+}
 /** A sharper icon for the site, or null (cached either way). `force` refetches. */
 export function hiResIcon(pageUrl: string, force = false): Promise<string | null> {
   const origin = originOf(pageUrl);
   if (!origin || typeof indexedDB === 'undefined') return Promise.resolve(null);
   const key = `${origin}|${force}`;
+  if (!force && memo.has(origin)) return Promise.resolve(memo.get(origin)!);
   let p = inflight.get(key);
   if (!p) {
     p = (async () => {
       const hit = await op<Fetched | undefined>('fetched', 'readonly', (s) => s.get(origin)).catch(() => undefined);
       const age = hit ? Date.now() - hit.at : Infinity;
       if (!force && hit && (hit.blob ? age < REFRESH_HIT_MS : age < RETRY_MISS_MS)) return hit.blob ? objectUrl(`f:${origin}`, hit.blob) : null;
-      const page = await fetchWithTimeout(`${origin}/`);
-      const html = page && /html/i.test(page.headers.get('content-type') ?? '') ? (await page.text()).slice(0, 300_000) : '';
-      let blob: Blob | null = null;
-      for (const c of iconCandidates(html, page?.url || `${origin}/`).slice(0, 5)) {
-        const r = await fetchWithTimeout(c);
-        if (r && (blob = await normalize(await r.blob(), 48))) break;
-      }
+      const blob = await slot(async () => {
+        const page = await fetchWithTimeout(`${origin}/`);
+        const html = page && /html/i.test(page.headers.get('content-type') ?? '') ? (await page.text()).slice(0, 300_000) : '';
+        for (const c of iconCandidates(html, page?.url || `${origin}/`).slice(0, 4)) {
+          const r = await fetchWithTimeout(c);
+          const b = r ? await normalize(await r.blob(), 48) : null;
+          if (b) return b;
+        }
+        return null;
+      });
       await op('fetched', 'readwrite', (s) => s.put({ origin, blob, at: Date.now() } satisfies Fetched)).catch(() => {});
       if (blob) {
         const old = urls.get(`f:${origin}`);
@@ -124,7 +143,9 @@ export function hiResIcon(pageUrl: string, force = false): Promise<string | null
         return objectUrl(`f:${origin}`, blob);
       }
       return hit?.blob ? objectUrl(`f:${origin}`, hit.blob) : null;
-    })().finally(() => inflight.delete(key));
+    })()
+      .then((u) => (memo.set(origin, u), u))
+      .finally(() => inflight.delete(key));
     inflight.set(key, p);
   }
   return p;
@@ -142,8 +163,14 @@ async function pixels(src: string): Promise<Uint8ClampedArray | null> {
   return g.getImageData(0, 0, 32, 32).data;
 }
 let globe: Promise<Uint8ClampedArray | null> | null = null;
+const defaultMemo = new Map<string, Promise<boolean>>();
 /** True when the browser has no favicon for this page (it would draw the generic globe). */
-export async function isDefaultFavicon(pageUrl: string): Promise<boolean> {
+export function isDefaultFavicon(pageUrl: string): Promise<boolean> {
+  let p = defaultMemo.get(pageUrl);
+  if (!p) defaultMemo.set(pageUrl, (p = compareWithGlobe(pageUrl)));
+  return p;
+}
+async function compareWithGlobe(pageUrl: string): Promise<boolean> {
   globe ??= pixels(favicon('https://oxygen-no-such-site.invalid/', 64));
   const [a, b] = await Promise.all([pixels(favicon(pageUrl, 64)), globe]);
   if (!a || !b) return !a;

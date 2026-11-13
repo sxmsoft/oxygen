@@ -14,6 +14,7 @@
   import Wallpaper from './Wallpaper.svelte';
   import { putMedia, deleteMedia } from './wallpaperStore';
   import logoSvg from '../../../resources/branding/product_logo.svg';
+  import { perf } from '../lib/perf.svelte';
 
   let { env }: { env: OxygenEnvironment } = $props();
   // svelte-ignore state_referenced_locally
@@ -38,7 +39,18 @@
   const stored = new StoredValue<unknown>('oxygen.newtab.layout', null);
   const layout = $derived<Layout>(stored.ready && gridStored.ready ? parseLayout(stored.value, WIDGETS, cols) ?? defaultLayout(i18n.locale) : []);
   let preview = $state<Layout | null>(null);
-  const shown = $derived(preview ?? layout);
+  const shownRaw = $derived(preview ?? layout);
+  // Same settings content -> same object, so widget effects (weather, bookmarks)
+  // don't re-run when another widget moves or a layout write echoes back.
+  const settingsCache = new Map<string, { json: string; obj: Record<string, unknown> }>();
+  function stableSettings(id: string, v: Record<string, unknown>): Record<string, unknown> {
+    const json = JSON.stringify(v);
+    const hit = settingsCache.get(id);
+    if (hit && hit.json === json) return hit.obj;
+    settingsCache.set(id, { json, obj: v });
+    return v;
+  }
+  const shown = $derived(shownRaw.map((w) => ({ ...w, settings: stableSettings(w.id, w.settings) })));
 
   let editing = $state(false);
   let drawer = $state(false);
@@ -95,25 +107,45 @@
     drag = { id, mode, dx: e.clientX - r.left - item.x * (colW + GAP), dy: e.clientY - r.top - item.y * (rowH + GAP), px: e.clientX - r.left, py: e.clientY - r.top };
     preview = layout;
   }
+  // Pointer moves are coalesced to one update per frame, and the layout is only
+  // recomputed when the target cell changes. Nothing is written until the drop.
+  let pending: { x: number; y: number } | null = null;
+  let frame = 0;
+  let lastCell = '';
   function onMove(e: PointerEvent) {
-    if (!drag || !gridEl) return;
+    if (!drag) return;
+    pending = { x: e.clientX, y: e.clientY };
+    if (!frame) frame = requestAnimationFrame(applyMove);
+  }
+  function applyMove() {
+    frame = 0;
+    if (!drag || !gridEl || !pending) return;
     const r = gridEl.getBoundingClientRect();
-    drag.px = e.clientX - r.left;
-    drag.py = e.clientY - r.top;
-    const item = layout.find((p) => p.id === drag!.id)!;
+    drag.px = pending.x - r.left;
+    drag.py = pending.y - r.top;
+    pending = null;
+    const item = layout.find((p) => p.id === drag!.id);
+    if (!item) return;
     if (drag.mode === 'move') {
       const x = Math.round((drag.px - drag.dx) / (colW + GAP));
-      const y = Math.round((drag.py - drag.dy) / (rowH + GAP));
-      preview = moveWidget(layout, drag.id, x, Math.max(0, y), WIDGETS, cols);
+      const y = Math.max(0, Math.round((drag.py - drag.dy) / (rowH + GAP)));
+      if (lastCell === `m${x},${y}`) return;
+      lastCell = `m${x},${y}`;
+      preview = moveWidget(layout, drag.id, x, y, WIDGETS, cols);
     } else {
       const w = Math.round((drag.px - item.x * (colW + GAP) + GAP) / (colW + GAP));
       const h = Math.round((drag.py - item.y * (rowH + GAP) + GAP) / (rowH + GAP));
+      if (lastCell === `r${w},${h}`) return;
+      lastCell = `r${w},${h}`;
       preview = resizeWidget(layout, drag.id, w, h, WIDGETS, cols);
     }
   }
   function endDrag() {
     if (!drag) return;
-    if (preview) commit(preview);
+    if (frame) cancelAnimationFrame(frame), (frame = 0);
+    if (pending) applyMove();
+    lastCell = '';
+    if (preview && JSON.stringify(preview) !== JSON.stringify(layout)) commit(preview);
     drag = null;
     preview = null;
   }
@@ -324,6 +356,14 @@
       </div>
       <button class="ox-btn small ghost danger" data-testid="reset-all" onclick={resetAll}>{t('nt.resetAll')}</button>
     {/if}
+    <h3>{t('perf.title')}</h3>
+    <label class="ox-label">{t('perf.mode')}
+      <select class="ox-select" data-testid="perf-mode" value={perf.prefs.mode} onchange={(e) => perf.set({ mode: (e.target as HTMLSelectElement).value as 'auto' | 'on' | 'off' })}>
+        <option value="auto">{t('perf.auto')}{perf.deviceMemory ? ` (${perf.deviceMemory} GB)` : ''}</option><option value="on">{t('perf.on')}</option><option value="off">{t('perf.off')}</option>
+      </select>
+    </label>
+    <p class="ox-muted small" data-testid="perf-state">{perf.lite ? t('perf.liteOn') : t('perf.liteOff')}</p>
+    <label class="ox-check"><input type="checkbox" data-testid="perf-glass" checked={perf.prefs.glass} disabled={perf.lite} onchange={(e) => perf.set({ glass: (e.target as HTMLInputElement).checked })} />{t('perf.glass')}</label>
     {#if wallpaperOn}
       <h3>{t('nt.wallpaper')}</h3>
       <label class="ox-label">{t('wp.kind')}
