@@ -1,20 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { OxygenCore, OXYGEN_CORE_VERSION } from '../../oxygen-core/src/OxygenCore.js';
-  import {
-    createObsidianThemeModule,
-    obsidianThemeManifest,
-  } from '../../modules/core-theme-obsidian/src/index.js';
+  import { OXYGEN_CORE_VERSION } from '../../oxygen-core/src/OxygenCore.js';
   import type {
     OxygenModuleManifest,
     PerfBudgetSnapshot,
     ThemeTokens,
   } from '../../sdk/src/types.js';
-  import { BrowserConfigStorage } from './lib/browserStorage';
-  import upstreamMeta from '../../UPSTREAM.json';
+  import type { OxygenEnvironment, RuntimeInfo } from './lib/env';
+  import {
+    parseSection,
+    type SectionId,
+    type ThemePackStatus,
+  } from '../../extension/src/shared.js';
   import logoSvg from '../../resources/branding/product_logo.svg';
-
-  type SectionId = 'dashboard' | 'appearance' | 'modules' | 'performance' | 'advanced';
 
   interface ModuleView {
     manifest: OxygenModuleManifest;
@@ -23,49 +21,13 @@
     config: Record<string, unknown>;
   }
 
-  const core = new OxygenCore({ storage: new BrowserConfigStorage() });
+  let { env }: { env: OxygenEnvironment } = $props();
+  // svelte-ignore state_referenced_locally
+  const core = env.core; // env is fixed for the page lifetime
+  let runtime = $state<RuntimeInfo | null>(null);
+  let themePack = $state<ThemePackStatus | null>(null);
 
-  const perfGuardManifest: OxygenModuleManifest = {
-    id: 'core-perf-guard',
-    name: 'Performance Guard',
-    description: 'Enforces lazy module activation and blocks idle background polling loops.',
-    version: '0.1.0',
-    author: 'Oxygen Browser Team',
-    category: 'core',
-    minOxygenVersion: '0.1.0-alpha.1',
-    permissions: ['config:read', 'perf:read'],
-    dependencies: [],
-    entryPoint: 'builtin:perf-guard',
-    configSchema: {
-      strictLazyLoad: {
-        type: 'boolean',
-        label: 'Strict Lazy Loading',
-        description: 'Defer non-critical UI extensions until their panel is opened.',
-        default: true,
-      },
-      memoryBudgetMb: {
-        type: 'number',
-        label: 'Incremental Memory Budget (MB)',
-        description: 'Warning threshold above base Helium RSS footprint.',
-        default: 20,
-        min: 10,
-        max: 40,
-        step: 2,
-      },
-    },
-  };
-
-  core.registerModule(obsidianThemeManifest, createObsidianThemeModule, true);
-  core.registerModule(
-    perfGuardManifest,
-    () => ({
-      onEnable() {},
-      onDisable() {},
-    }),
-    true
-  );
-
-  let activeSection = $state<SectionId>('dashboard');
+  let activeSection = $state<SectionId>(parseSection(location.hash) ?? 'dashboard');
   let selectedModuleId = $state<string>('core-theme-obsidian');
   let modules = $state<ModuleView[]>([]);
   let themeTokens = $state<Partial<ThemeTokens>>({});
@@ -101,13 +63,31 @@
     }
   }
 
-  onMount(async () => {
+  onMount(() => {
     core.bus.on('theme:tokens-changed', ({ tokens }) => {
       applyTokensToDocument(tokens);
     });
-    await core.init();
-    applyTokensToDocument(core.getActiveThemeTokens());
-    syncView();
+    const offExternal = env.onExternalChange(() => {
+      applyTokensToDocument(core.getActiveThemeTokens());
+      syncView();
+      statusBanner = 'Settings updated from another Oxygen tab.';
+    });
+    const onHash = () => {
+      const section = parseSection(location.hash);
+      if (section) activeSection = section;
+    };
+    window.addEventListener('hashchange', onHash);
+    void core.init().then(() => {
+      applyTokensToDocument(core.getActiveThemeTokens());
+      syncView();
+    });
+    void env.runtimeInfo().then((info) => (runtime = info));
+    const offPack = env.onThemePackStatus((status) => (themePack = status));
+    return () => {
+      offExternal();
+      offPack();
+      window.removeEventListener('hashchange', onHash);
+    };
   });
 
   async function toggleModule(id: string, currentlyEnabled: boolean) {
@@ -193,21 +173,20 @@
         class:active={activeSection === 'advanced'}
         onclick={() => (activeSection = 'advanced')}
       >
-        Config & Upstream
+        Config & Runtime
       </button>
     </nav>
 
     <div class="sidebar-footer">
-      <span class="pill">helium {upstreamMeta.helium.chromium_version}</span>
-      <span class="pill">{core.bridge.isChromiumWebUI ? 'WebUI Native' : 'Standalone Preview'}</span>
+      <span class="pill">{env.mode === 'extension' ? 'Helium Extension' : 'Standalone Preview'}</span>
     </div>
   </aside>
 
   <main class="content">
     <header class="topbar">
       <div>
-        <h1>oxygen://settings</h1>
-        <p class="subtitle">Oxygen Control Center — Make Your Browser Yours.</p>
+        <h1>Oxygen Control Center</h1>
+        <p class="subtitle">Make Your Browser Yours.</p>
       </div>
       {#if statusBanner}
         <div class="banner">{statusBanner}</div>
@@ -220,11 +199,10 @@
           <div class="hero-left">
             <img src={logoSvg} alt="Oxygen Emblem" class="hero-logo" />
             <div>
-              <h2>Oxygen Browser Alpha 0.1</h2>
+              <h2>Oxygen Alpha 0.1</h2>
               <p>
-                Built on Helium ({upstreamMeta.helium.commit.slice(0, 8)}) / Chromium
-                {upstreamMeta.helium.chromium_version}. Native modular customization with zero
-                background polling.
+                Runs on {runtime?.browser ?? 'Helium'} as an extension. Modular customization
+                with zero background polling.
               </p>
             </div>
           </div>
@@ -243,7 +221,7 @@
         </article>
 
         <article class="card stat">
-          <span class="label">Native Theme</span>
+          <span class="label">Browser Theme</span>
           <strong>{themeModule?.enabled ? 'Obsidian Metallic' : 'Helium Default'}</strong>
           <span class="hint">Accent {themeTokens.accentColor ?? '#D8DEE9'}</span>
         </article>
@@ -261,13 +239,27 @@
             <div class="preview-tab">New Tab</div>
           </div>
           <div class="preview-toolbar">
-            <div class="preview-omnibox">oxygen://settings</div>
-            <div class="preview-badge">Obsidian Native</div>
+            <div class="preview-omnibox">ox settings</div>
+            <div class="preview-badge">Obsidian</div>
           </div>
         </article>
 
         <article class="card">
-          <h2>Obsidian Metallic — Native Theme Controls</h2>
+          <h2>Obsidian Metallic — Theme Controls</h2>
+          <p class="subtitle">
+            Surface Contrast switches the Helium theme pack (frame, toolbar, tabs, omnibox).
+            Accent, radius, animation and translucency apply to Oxygen pages only.
+          </p>
+          {#if themePack}
+            <p class="subtitle theme-pack" data-testid="theme-pack-status">
+              Browser theme pack: <strong>{themePack.active ?? 'Helium default'}</strong>
+              {#if themePack.desired && themePack.desired !== themePack.active}
+                — the <strong>{themePack.desired}</strong> pack is not loaded. Run
+                <code>./scripts/oxygen.sh run --theme {themePack.desired}</code> to apply it to the
+                browser frame.
+              {/if}
+            </p>
+          {/if}
           <div class="form-grid">
             <label class="field">
               <span>Surface Contrast</span>
@@ -507,7 +499,7 @@
           <h2>Helium vs Oxygen Benchmark Harness</h2>
           <p class="subtitle">
             Run <code>./scripts/oxygen.sh benchmark</code> from the repository root to compare
-            RSS/PSS memory, idle CPU %, and startup latency against unmodified Helium.
+            RSS/PSS memory, idle CPU %, and startup latency against bare Helium (Helium vs Helium + Oxygen extension).
           </p>
         </article>
       </section>
@@ -516,12 +508,12 @@
     {#if activeSection === 'advanced'}
       <section class="panel-stack">
         <article class="card">
-          <h2>Upstream Helium Sync Metadata</h2>
+          <h2>Runtime</h2>
           <div class="perf-rows">
-            <div><span>Oxygen Version</span><strong>{upstreamMeta.oxygen_version}</strong></div>
-            <div><span>Chromium Version</span><strong>{upstreamMeta.helium.chromium_version}</strong></div>
-            <div><span>Pinned helium Commit</span><strong>{upstreamMeta.helium.commit}</strong></div>
-            <div><span>Pinned helium-linux Commit</span><strong>{upstreamMeta.helium_linux.commit}</strong></div>
+            <div><span>Oxygen Core</span><strong>{OXYGEN_CORE_VERSION}</strong></div>
+            <div><span>Extension Version</span><strong>{runtime?.extensionVersion ?? 'n/a (standalone)'}</strong></div>
+            <div><span>Extension ID</span><strong>{runtime?.extensionId ?? 'n/a'}</strong></div>
+            <div><span>Browser</span><strong>{runtime?.browser ?? '…'}</strong></div>
           </div>
         </article>
 
