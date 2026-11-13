@@ -3,10 +3,12 @@ import {
   OXYGEN_CONFIG_STORAGE_KEY,
   isConfigBundle,
 } from '../../oxygen-core/src/ChromeStorageAdapter.js';
+import { createDefaultBundle } from '../../oxygen-core/src/ConfigEngine.js';
 import {
   CONTROL_CENTER_SECTIONS,
   THEME_MODULE_ID,
   THEME_NAME_PREFIX,
+  THEME_LAUNCH_PACK_KEY,
   THEME_PACK_STATUS_KEY,
   THEME_VARIANTS,
   parseSection,
@@ -26,7 +28,8 @@ import {
 /** Which theme pack should be active for a stored config bundle (null = Helium default). */
 export function desiredThemeVariant(raw: unknown): ThemeVariant | null {
   if (!isConfigBundle(raw)) return 'obsidian';
-  if (!raw.enabledModuleIds.includes(THEME_MODULE_ID)) return null;
+  // The theme module is default-enabled; it is off only when explicitly disabled.
+  if ((raw.disabledModuleIds ?? []).includes(THEME_MODULE_ID)) return null;
   const v = raw.modules[THEME_MODULE_ID]?.surfaceContrast;
   return (THEME_VARIANTS as readonly unknown[]).includes(v) ? (v as ThemeVariant) : 'obsidian';
 }
@@ -65,13 +68,49 @@ async function applyBrowserTheme(raw: unknown): Promise<void> {
   await chrome.storage.local.set({ [THEME_PACK_STATUS_KEY]: status });
 }
 
+/**
+ * Browser start: if the launcher switched theme packs since the previous start
+ * (scripts/oxygen-launch.sh --theme X), Surface Contrast follows the new pack so
+ * page and browser frame agree. Otherwise the stored config is applied as is,
+ * so a start never overwrites settings the user changed meanwhile.
+ */
 async function syncThemeFromStorage(): Promise<void> {
-  const stored = await chrome.storage.local.get(OXYGEN_CONFIG_STORAGE_KEY);
-  await applyBrowserTheme(stored[OXYGEN_CONFIG_STORAGE_KEY]);
+  const got = await chrome.storage.local.get([OXYGEN_CONFIG_STORAGE_KEY, THEME_LAUNCH_PACK_KEY]);
+  const stored = got[OXYGEN_CONFIG_STORAGE_KEY];
+  const previousPack = got[THEME_LAUNCH_PACK_KEY] as ThemeVariant | undefined;
+  const active = variantFromThemeName(
+    (await oxygenThemePacks()).find((p) => p.enabled)?.name ?? ''
+  );
+  if (active) await chrome.storage.local.set({ [THEME_LAUNCH_PACK_KEY]: active });
+
+  const packChanged = active !== null && previousPack !== undefined && previousPack !== active;
+  const noConfigYet = !isConfigBundle(stored);
+  if (active && (packChanged || noConfigYet)) {
+    const bundle = isConfigBundle(stored) ? structuredClone(stored) : createDefaultBundle();
+    const themeOn = !(bundle.disabledModuleIds ?? []).includes(THEME_MODULE_ID);
+    if (themeOn && bundle.modules[THEME_MODULE_ID]?.surfaceContrast !== active) {
+      bundle.modules[THEME_MODULE_ID] = {
+        ...(bundle.modules[THEME_MODULE_ID] ?? {}),
+        surfaceContrast: active,
+      };
+      // onChanged -> applyBrowserTheme + open Control Center tabs update
+      await chrome.storage.local.set({ [OXYGEN_CONFIG_STORAGE_KEY]: bundle });
+      return;
+    }
+  }
+  await applyBrowserTheme(stored);
 }
 
 chrome.runtime.onInstalled.addListener(() => void syncThemeFromStorage());
 chrome.runtime.onStartup.addListener(() => void syncThemeFromStorage());
+// A theme pack loaded later than Oxygen itself: apply the config (no adoption,
+// so a running session never overwrites the user's choice).
+chrome.management.onInstalled.addListener((info) => {
+  if (info.type !== 'theme' || !info.name.startsWith(THEME_NAME_PREFIX)) return;
+  void chrome.storage.local
+    .get(OXYGEN_CONFIG_STORAGE_KEY)
+    .then((r) => applyBrowserTheme(r[OXYGEN_CONFIG_STORAGE_KEY]));
+});
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && OXYGEN_CONFIG_STORAGE_KEY in changes) {

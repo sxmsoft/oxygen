@@ -39,3 +39,6 @@ export interface ThemePackStatus {
   active: ThemeVariant | null;
   installed: ThemeVariant[];
 }
+
+/** Theme pack that was active at the previous browser start (launcher choice). */
+export const THEME_LAUNCH_PACK_KEY = 'oxygen.theme.launch_pack';

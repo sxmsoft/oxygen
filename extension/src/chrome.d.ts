@@ -40,6 +40,7 @@ declare namespace chrome {
     }
     function getAll(): Promise<ExtensionInfo[]>;
     function setEnabled(id: string, enabled: boolean): Promise<void>;
+    const onInstalled: { addListener(cb: (info: ExtensionInfo) => void): void };
   }
   namespace omnibox {
     interface SuggestResult {
