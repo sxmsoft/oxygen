@@ -26,7 +26,8 @@ function oxygenIcons(): Plugin {
 }
 
 // `vite build`                  -> standalone preview in control-center/dist
-// `vite build --mode extension` -> MV3 extension in dist/extension (page + service worker)
+// `vite build --mode extension` -> MV3 extension in dist/extension (pages + service worker);
+//                                  vite.content.config.ts then adds the injected palette script.
 export default defineConfig(({ mode }) => {
   const extension = mode === 'extension';
   return {
@@ -42,12 +43,19 @@ export default defineConfig(({ mode }) => {
         input: extension
           ? {
               index: resolve(here, 'index.html'),
+              newtab: resolve(here, 'newtab.html'),
+              sidepanel: resolve(here, 'sidepanel.html'),
+              palette: resolve(here, 'palette.html'),
               background: resolve(repo, 'extension/src/background.ts'),
             }
           : resolve(here, 'index.html'),
         output: {
           entryFileNames: (chunk) =>
-            chunk.name === 'background' ? 'background.js' : 'assets/control-center.js',
+            chunk.name === 'background'
+              ? 'background.js'
+              : chunk.name === 'index'
+                ? 'assets/control-center.js'
+                : `assets/${chunk.name}.js`,
           chunkFileNames: 'assets/[name].js',
           assetFileNames: 'assets/[name][extname]',
         },

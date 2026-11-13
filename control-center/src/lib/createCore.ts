@@ -6,6 +6,7 @@ import {
   obsidianThemeManifest,
 } from '../../../modules/core-theme-obsidian/src/index.js';
 import type { OxygenModuleManifest } from '../../../sdk/src/types.js';
+import { FEATURE_MANIFESTS } from '../../../extension/src/modules/manifests.js';
 
 export const perfGuardManifest: OxygenModuleManifest = {
   id: 'core-perf-guard',
@@ -49,5 +50,10 @@ export function createCore(storage: ConfigStorageAdapter, bridge?: NativeBridge)
     }),
     true
   );
+  // Feature modules: their runtime lives in the service worker / pages and reads
+  // the same config bundle, so the in-page instance is a no-op handle.
+  for (const manifest of FEATURE_MANIFESTS) {
+    core.registerModule(manifest, () => ({ onEnable() {}, onDisable() {} }), true);
+  }
   return core;
 }

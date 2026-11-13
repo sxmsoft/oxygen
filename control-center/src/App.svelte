@@ -13,6 +13,12 @@
     type ThemePackStatus,
   } from '../../extension/src/shared.js';
   import logoSvg from '../../resources/branding/product_logo.svg';
+  import { i18n } from './lib/i18n.svelte';
+  import { fieldLabel, translateOr } from '../../extension/src/logic/i18n.js';
+  import WorkspacesSection from './cc/WorkspacesSection.svelte';
+  import SiteRulesSection from './cc/SiteRulesSection.svelte';
+  import FeatureCards from './cc/FeatureCards.svelte';
+  import { installPagePalette } from './lib/pagePalette';
 
   interface ModuleView {
     manifest: OxygenModuleManifest;
@@ -35,6 +41,27 @@
   let exportJson = $state('');
   let importJson = $state('');
   let statusBanner = $state('');
+
+  const t = i18n.t;
+  const modName = (m: OxygenModuleManifest) => translateOr(i18n.locale, `mod.${m.id}`, m.name);
+  const modDesc = (m: OxygenModuleManifest) => translateOr(i18n.locale, `modDesc.${m.id}`, m.description);
+  const fLabel = (id: string, key: string, fb: string) => fieldLabel(i18n.locale, id, key, fb);
+  const isOn = (id: string) => modules.find((m) => m.manifest.id === id)?.enabled ?? false;
+  let language = $state('auto');
+  function setLanguage(v: string) {
+    core.config.setGlobalValue('language', v);
+    language = v;
+    i18n.sync(core);
+  }
+  const NAV: { id: SectionId; key: string }[] = [
+    { id: 'dashboard', key: 'nav.dashboard' },
+    { id: 'appearance', key: 'nav.appearance' },
+    { id: 'modules', key: 'nav.modules' },
+    { id: 'workspaces', key: 'nav.workspaces' },
+    { id: 'sites', key: 'nav.sites' },
+    { id: 'performance', key: 'nav.performance' },
+    { id: 'advanced', key: 'nav.advanced' },
+  ];
 
   const accentPresets = ['#D8DEE9', '#7DD3FC', '#6EE7B7', '#FCD34D', '#F472B6'];
 
@@ -70,7 +97,9 @@
     const offExternal = env.onExternalChange(() => {
       applyTokensToDocument(core.getActiveThemeTokens());
       syncView();
-      statusBanner = 'Settings updated from another Oxygen tab.';
+      i18n.sync(core);
+      language = String(core.config.getGlobal().language ?? 'auto');
+      statusBanner = t('cc.settingsUpdated');
     });
     const onHash = () => {
       const section = parseSection(location.hash);
@@ -80,6 +109,9 @@
     void core.init().then(() => {
       applyTokensToDocument(core.getActiveThemeTokens());
       syncView();
+      i18n.sync(core);
+      language = String(core.config.getGlobal().language ?? 'auto');
+      if (env.mode === 'extension') installPagePalette(core);
     });
     void env.runtimeInfo().then((info) => (runtime = info));
     const offPack = env.onThemePackStatus((status) => (themePack = status));
@@ -145,36 +177,11 @@
     </div>
 
     <nav class="nav">
-      <button
-        class:active={activeSection === 'dashboard'}
-        onclick={() => (activeSection = 'dashboard')}
-      >
-        Dashboard
-      </button>
-      <button
-        class:active={activeSection === 'appearance'}
-        onclick={() => (activeSection = 'appearance')}
-      >
-        Appearance & Theme
-      </button>
-      <button
-        class:active={activeSection === 'modules'}
-        onclick={() => (activeSection = 'modules')}
-      >
-        Modules ({modules.filter((m) => m.enabled).length}/{modules.length})
-      </button>
-      <button
-        class:active={activeSection === 'performance'}
-        onclick={() => (activeSection = 'performance')}
-      >
-        Performance
-      </button>
-      <button
-        class:active={activeSection === 'advanced'}
-        onclick={() => (activeSection = 'advanced')}
-      >
-        Config & Runtime
-      </button>
+      {#each NAV as item}
+        <button class:active={activeSection === item.id} data-section={item.id} onclick={() => (location.hash = item.id, activeSection = item.id)}>
+          {t(item.key)}{item.id === 'modules' ? ` (${modules.filter((m) => m.enabled).length}/${modules.length})` : ''}
+        </button>
+      {/each}
     </nav>
 
     <div class="sidebar-footer">
@@ -185,8 +192,8 @@
   <main class="content">
     <header class="topbar">
       <div>
-        <h1>Oxygen Control Center</h1>
-        <p class="subtitle">Make Your Browser Yours.</p>
+        <h1>{t('cc.title')}</h1>
+        <p class="subtitle">{t('app.tagline')}</p>
       </div>
       {#if statusBanner}
         <div class="banner">{statusBanner}</div>
@@ -199,7 +206,7 @@
           <div class="hero-left">
             <img src={logoSvg} alt="Oxygen Emblem" class="hero-logo" />
             <div>
-              <h2>Oxygen Alpha 0.1</h2>
+              <h2>Oxygen Alpha 0.2</h2>
               <p>
                 Runs on Helium ({runtime?.browser ?? 'Chromium'}) as an extension. Modular customization
                 with zero background polling.
@@ -208,10 +215,12 @@
           </div>
         </article>
 
+        {#if env.mode === 'extension'}<FeatureCards suspenderOn={isOn('tab-suspender')} />{/if}
+
         <article class="card stat">
-          <span class="label">Active Modules</span>
+          <span class="label">{t('cc.activeModules')}</span>
           <strong>{perf?.activeModules ?? 0} / {perf?.totalRegisteredModules ?? 0}</strong>
-          <span class="hint">Disabled modules never execute</span>
+          <span class="hint">{t('cc.disabledNeverRun')}</span>
         </article>
 
         <article class="card stat">
@@ -368,17 +377,18 @@
                 onclick={() => (selectedModuleId = mod.manifest.id)}
               >
                 <div class="mod-title">
-                  <strong>{mod.manifest.name}</strong>
+                  <strong>{modName(mod.manifest)}</strong>
                   <span class="tag">{mod.manifest.category}</span>
                 </div>
-                <p>{mod.manifest.description}</p>
+                <p>{modDesc(mod.manifest)}</p>
               </button>
               <button
                 class="toggle-btn"
                 class:enabled={mod.enabled}
+                data-module-toggle={mod.manifest.id}
                 onclick={() => toggleModule(mod.manifest.id, mod.enabled)}
               >
-                {mod.enabled ? 'Enabled' : 'Disabled'}
+                {mod.enabled ? t('common.enabled') : t('common.disabled')}
               </button>
             </div>
           {/each}
@@ -388,7 +398,7 @@
           <article class="card module-detail">
             <div class="detail-head">
               <div>
-                <h2>{selectedModule.manifest.name}</h2>
+                <h2>{modName(selectedModule.manifest)}</h2>
                 <p class="subtitle">
                   {selectedModule.manifest.id} &middot; v{selectedModule.manifest.version} &middot;
                   by {selectedModule.manifest.author}
@@ -403,7 +413,7 @@
               {/each}
             </div>
 
-            <h3>Module Configuration</h3>
+            <h3>{t('cc.moduleConfig')}</h3>
             <div class="form-grid">
               {#each Object.entries(selectedModule.manifest.configSchema) as [key, field]}
                 {#if field.type === 'boolean'}
@@ -418,11 +428,11 @@
                           (e.target as HTMLInputElement).checked
                         )}
                     />
-                    <span>{field.label}</span>
+                    <span>{fLabel(selectedModule.manifest.id, key, field.label)}</span>
                   </label>
                 {:else if field.type === 'enum'}
                   <label class="field">
-                    <span>{field.label}</span>
+                    <span>{fLabel(selectedModule.manifest.id, key, field.label)}</span>
                     <select
                       value={String(selectedModule.config[key])}
                       onchange={(e) =>
@@ -439,7 +449,7 @@
                   </label>
                 {:else if field.type === 'number'}
                   <label class="field">
-                    <span>{field.label} ({selectedModule.config[key]})</span>
+                    <span>{fLabel(selectedModule.manifest.id, key, field.label)} ({selectedModule.config[key]})</span>
                     <input
                       type="range"
                       min={field.min ?? 0}
@@ -456,7 +466,7 @@
                   </label>
                 {:else}
                   <label class="field">
-                    <span>{field.label}</span>
+                    <span>{fLabel(selectedModule.manifest.id, key, field.label)}</span>
                     <input
                       type={field.type === 'color' ? 'color' : 'text'}
                       value={String(selectedModule.config[key])}
@@ -474,6 +484,14 @@
           </article>
         {/if}
       </section>
+    {/if}
+
+    {#if activeSection === 'workspaces'}
+      <WorkspacesSection enabled={isOn('workspaces')} />
+    {/if}
+
+    {#if activeSection === 'sites'}
+      <SiteRulesSection enabled={isOn('site-rules')} />
     {/if}
 
     {#if activeSection === 'performance'}
@@ -507,6 +525,15 @@
 
     {#if activeSection === 'advanced'}
       <section class="panel-stack">
+        <article class="card">
+          <h2>{t('lang.label')}</h2>
+          <select class="ox-select lang" value={language} data-testid="language" onchange={(e) => setLanguage((e.target as HTMLSelectElement).value)}>
+            <option value="auto">{t('lang.auto')}</option>
+            <option value="en">English</option>
+            <option value="tr">Türkçe</option>
+          </select>
+        </article>
+
         <article class="card">
           <h2>Runtime</h2>
           <div class="perf-rows">
@@ -542,6 +569,7 @@
 </div>
 
 <style>
+  .lang { max-width: 260px; margin-top: 8px; }
   .shell {
     display: grid;
     grid-template-columns: 260px 1fr;
