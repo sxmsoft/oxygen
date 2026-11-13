@@ -34,7 +34,7 @@
     loading = true;
     // One fetch for all open new tabs: the first takes the lock, the others then
     // find its fresh result in the cache.
-    const locked = (f: () => Promise<void>): Promise<void> => (navigator.locks ? (navigator.locks.request('oxygen-weather', f) as Promise<void>) : f());
+    const locked = (f: () => Promise<void>): Promise<void> => (navigator.locks ? navigator.locks.request('oxygen-weather', f).then(() => undefined) : f());
     try {
       await locked(async () => {
       cache = await readCache();
