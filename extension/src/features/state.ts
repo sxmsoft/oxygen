@@ -7,9 +7,11 @@ import { resolveLocale, translate, type Locale, type MessageKey } from '../logic
 /** Config access shared by the service worker and extension pages (reads chrome.storage.local). */
 let cached: OxygenConfigBundle | null | undefined;
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && OXYGEN_CONFIG_STORAGE_KEY in changes) cached = undefined;
-});
+if (typeof chrome !== 'undefined' && chrome.storage) {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && OXYGEN_CONFIG_STORAGE_KEY in changes) cached = undefined;
+  });
+}
 
 export async function getBundle(): Promise<OxygenConfigBundle | null> {
   if (cached !== undefined) return cached;

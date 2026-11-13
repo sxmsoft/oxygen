@@ -1,7 +1,11 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { ingestShortcuts } from '../../../../extension/src/features/shortcuts.js';
   import { StoredValue, favicon, hostLabel, importFromHelium, normalizeUrl, type QuickLink } from '../../lib/kv.svelte';
   let { t, editing }: { t: (k: string, p?: Record<string, string | number>) => string; editing: boolean } = $props();
   let status = $state('');
+  // Picks up a new Helium import even when the service worker missed it (applied once per content).
+  onMount(() => void ingestShortcuts(false).catch(() => {}));
   async function doImport() {
     status = await importFromHelium(t);
   }

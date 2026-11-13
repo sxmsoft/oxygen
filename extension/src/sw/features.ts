@@ -14,6 +14,9 @@ import {
 import { autosaveSession, getStore, restoreById, rotateOnStartup, saveWorkspace } from '../features/workspaces.js';
 import { applyToAllTabs, applyToTab, forgetTab } from '../features/siteRules.js';
 import { ingestShortcuts } from '../features/shortcuts.js';
+import { swapStartupNtps, swapStartupNtpsSoon } from '../features/startupNtp.js';
+import { healSelfIfStale } from '../features/swHeal.js';
+import { OXYGEN_BUILD } from '../build.js';
 import { openSidePanel, paletteRun, paletteSearch, runCommand, type PaletteItem } from '../features/palette.js';
 
 const EXT_ORIGIN = chrome.runtime.getURL('');
@@ -133,13 +136,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return suspenderStats();
       case 'workspaces:restore':
         return restoreById(String(msg.id));
+      case 'oxygen:build':
+        return { build: OXYGEN_BUILD };
       case 'shortcuts:import':
         return ingestShortcuts(true);
       default:
         return undefined;
     }
   };
-  if (!['palette:search', 'palette:run', 'palette:command', 'palette:openFor', 'suspender:stats', 'workspaces:restore', 'shortcuts:import'].includes(msg.type)) {
+  if (!['palette:search', 'palette:run', 'palette:command', 'palette:openFor', 'suspender:stats', 'workspaces:restore', 'shortcuts:import', 'oxygen:build'].includes(msg.type)) {
     return false;
   }
   handle().then(sendResponse, (e) => sendResponse({ ok: false, error: String(e?.message ?? e) }));
@@ -147,15 +152,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 // ---------- Lifecycle & config changes ----------
+void healSelfIfStale().catch(() => {});
 async function startAll(): Promise<void> {
   await ingestShortcuts().catch(() => {});
   await syncSidePanel();
   await reconcileSuspender();
   await applyToAllTabs();
 }
-chrome.runtime.onInstalled.addListener(() => void startAll());
+chrome.runtime.onInstalled.addListener(() => {
+  swapStartupNtpsSoon();
+  void startAll();
+});
 chrome.runtime.onStartup.addListener(async () => {
-  await rotateOnStartup();
+  swapStartupNtpsSoon();
+  await rotateOnStartup().catch(() => {});
   await startAll();
 });
 
@@ -191,6 +201,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   commands: () => chrome.commands.getAll(),
   lastPaletteError: () => lastPaletteError,
   ingestShortcuts,
+  swapStartupNtps,
   explainSuspend: async (now = Date.now()) => {
     const cfg = await featureConfig<SuspenderConfig>('tab-suspender');
     return (await chrome.tabs.query({})).map((t) => ({ id: t.id, url: t.url, status: t.status, ...suspendDecision(t, cfg, now) }));

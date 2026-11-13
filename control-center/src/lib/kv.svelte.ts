@@ -1,3 +1,4 @@
+import { ingestShortcuts } from '../../../extension/src/features/shortcuts.js';
 /** Small reactive wrapper around one chrome.storage.local key (live across tabs and the side panel). */
 export class StoredValue<T> {
   value = $state<T>() as T;
@@ -41,10 +42,13 @@ export interface QuickLink {
   source?: 'helium' | 'topsites';
 }
 
-/** Asks the service worker to (re-)import Helium's new-tab shortcuts; returns a status line. */
+/**
+ * (Re-)imports Helium's new-tab shortcuts right here in the page (not via the
+ * service worker, which can be an older cached build); returns a status line.
+ */
 export async function importFromHelium(t: (k: string, p?: Record<string, string | number>) => string): Promise<string> {
-  if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return t('links.importNone');
-  const r = (await chrome.runtime.sendMessage({ type: 'shortcuts:import' })) as { source?: string; count?: number } | undefined;
+  if (typeof chrome === 'undefined' || !chrome.storage) return t('links.importNone');
+  const r = await ingestShortcuts(true);
   if (r?.source === 'helium') return t('links.importedHelium', { n: r.count ?? 0 });
   if (r?.source === 'topsites') return t('links.importedTop', { n: r.count ?? 0 });
   return t('links.importNone');
