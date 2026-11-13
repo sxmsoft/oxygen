@@ -1,0 +1,68 @@
+/** Small reactive wrapper around one chrome.storage.local key (live across tabs and the side panel). */
+export class StoredValue<T> {
+  value = $state<T>() as T;
+  ready = $state(false);
+  #key: string;
+  #timer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(key: string, initial: T) {
+    this.#key = key;
+    this.value = initial;
+    if (typeof chrome === 'undefined' || !chrome.storage) {
+      this.ready = true;
+      return;
+    }
+    void chrome.storage.local.get(key).then((r) => {
+      if (r[key] !== undefined) this.value = r[key] as T;
+      this.ready = true;
+    });
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && key in changes && changes[key].newValue !== undefined) {
+        this.value = changes[key].newValue as T;
+      }
+    });
+  }
+
+  /** Writes immediately, or debounced (typing in notes). */
+  set(v: T, debounceMs = 0): void {
+    this.value = v;
+    clearTimeout(this.#timer);
+    const write = () => chrome.storage?.local.set({ [this.#key]: $state.snapshot(this.value) });
+    if (debounceMs) this.#timer = setTimeout(write, debounceMs);
+    else void write();
+  }
+}
+
+export interface QuickLink {
+  id: string;
+  title: string;
+  url: string;
+}
+
+export function normalizeUrl(input: string): string | null {
+  const s = input.trim();
+  if (!s) return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(s) ? s : `https://${s}`;
+  try {
+    const u = new URL(withScheme);
+    return /^(https?|ftp|file):$/.test(u.protocol) ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function favicon(pageUrl: string, size = 32): string {
+  if (typeof chrome === 'undefined' || !chrome.runtime?.getURL) return '';
+  const u = new URL(chrome.runtime.getURL('/_favicon/'));
+  u.searchParams.set('pageUrl', pageUrl);
+  u.searchParams.set('size', String(size));
+  return u.toString();
+}
+
+export function hostLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}

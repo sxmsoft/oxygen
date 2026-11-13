@@ -1,0 +1,58 @@
+/* Shared component styles for Oxygen pages (new tab, side panel, Control Center sections). */
+.ox-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--ox-border);
+  background: color-mix(in srgb, var(--ox-surface) 92%, transparent);
+  color: var(--ox-text);
+  border-radius: var(--ox-radius);
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background calc(120ms * var(--ox-motion)) ease, border-color calc(120ms * var(--ox-motion)) ease;
+}
+.ox-btn:hover { border-color: color-mix(in srgb, var(--ox-accent) 45%, var(--ox-border)); }
+.ox-btn.primary { background: var(--ox-accent); color: var(--ox-bg); border-color: transparent; font-weight: 600; }
+.ox-btn.ghost { background: transparent; border-color: transparent; color: var(--ox-muted); }
+.ox-btn.ghost:hover { color: var(--ox-text); background: color-mix(in srgb, var(--ox-text) 7%, transparent); }
+.ox-btn.danger:hover { border-color: #f87171; color: #fca5a5; }
+.ox-btn.small { padding: 4px 8px; font-size: 12px; }
+.ox-icon-btn {
+  width: 26px; height: 26px; display: inline-grid; place-items: center; padding: 0;
+  border: 0; background: transparent; color: var(--ox-muted); border-radius: 7px; cursor: pointer; font-size: 14px;
+}
+.ox-icon-btn:hover { color: var(--ox-text); background: color-mix(in srgb, var(--ox-text) 9%, transparent); }
+.ox-input, .ox-select, .ox-textarea {
+  width: 100%;
+  border: 1px solid var(--ox-border);
+  background: color-mix(in srgb, var(--ox-bg) 70%, transparent);
+  color: var(--ox-text);
+  border-radius: var(--ox-radius);
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+}
+.ox-input:focus, .ox-select:focus, .ox-textarea:focus { border-color: color-mix(in srgb, var(--ox-accent) 60%, var(--ox-border)); }
+.ox-textarea { resize: vertical; font-family: ui-monospace, 'JetBrains Mono', monospace; line-height: 1.5; }
+.ox-label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--ox-muted); }
+.ox-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ox-text); cursor: pointer; }
+.ox-check input { accent-color: var(--ox-accent); }
+.ox-muted { color: var(--ox-muted); }
+.ox-row { display: flex; align-items: center; gap: 8px; }
+.ox-glass {
+  background: color-mix(in srgb, var(--ox-surface) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ox-border) 85%, transparent);
+  border-radius: calc(var(--ox-radius) + 4px);
+  backdrop-filter: blur(18px) saturate(1.15);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+}
+.ox-md h1, .ox-md h2, .ox-md h3 { margin: .3em 0 .2em; font-size: 1.05em; }
+.ox-md p { margin: .25em 0; }
+.ox-md ul, .ox-md ol { margin: .25em 0; padding-left: 1.3em; }
+.ox-md code { background: color-mix(in srgb, var(--ox-text) 10%, transparent); padding: 0 4px; border-radius: 4px; font-size: .92em; }
+.ox-md a { color: var(--ox-accent); }
+.ox-md li.task { list-style: none; margin-left: -1.2em; }
+.ox-scroll::-webkit-scrollbar { width: 8px; }
+.ox-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ox-text) 14%, transparent); border-radius: 8px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
