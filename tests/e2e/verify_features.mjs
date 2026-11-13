@@ -474,12 +474,14 @@ try {
       check('live video wallpaper plays muted + looping', wv);
       // Hidden tab -> paused
       const other = await cdp.openPage(A('cover'));
+      await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: false }, S); // emulated focus also pins visibility
       await cdp.send('Target.activateTarget', { targetId: other.targetId });
       await sleep(600);
       const hid = await cdp.evaluate(S, `({ hidden: document.hidden, paused: document.querySelector('[data-testid=wallpaper] video').paused })`);
       check('video pauses while the new tab is hidden', hid.hidden && hid.paused, JSON.stringify(hid));
       await cdp.send('Target.closeTarget', { targetId: other.targetId });
       await cdp.send('Target.activateTarget', { targetId: nt.targetId });
+      await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }, S);
       await sleep(600);
       const back = await cdp.evaluate(S, `({ hidden: document.hidden, paused: document.querySelector('[data-testid=wallpaper] video').paused })`);
       check('video resumes when visible again', !back.hidden && !back.paused, JSON.stringify(back));
