@@ -1,0 +1,17 @@
+{
+  "browser": { "has_seen_welcome_page": true },
+  "bookmark_bar": { "show_on_all_tabs": false },
+  "custom_links": {
+    "initialized": true,
+    "list": [
+      { "isMostVisited": false, "title": "Video", "url": "https://video.example/" },
+      { "isMostVisited": false, "title": "Çalışma Alanı", "url": "https://work.example/app" },
+      { "isMostVisited": false, "title": "Gizli Klasör", "url": "https://files.example/folder/abc#key-XYZ" },
+      { "isMostVisited": false, "title": "", "url": "https://www.untitled.example/" },
+      { "isMostVisited": false, "title": "Duplicate", "url": "https://VIDEO.example" },
+      { "isMostVisited": false, "title": "Bad", "url": "javascript:alert(1)" },
+      { "isMostVisited": false, "title": "Long Title For A Banner Tool", "url": "https://banner.example/tool" }
+    ]
+  },
+  "ntp": { "custom_links_visible": true, "shortcust_visible": true }
+}
