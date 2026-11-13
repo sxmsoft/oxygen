@@ -1,4 +1,5 @@
 import type { PerfBudgetSnapshot, ThemeTokens } from '../../sdk/src/types.js';
+import type { OxygenConfigBundle } from './ConfigEngine.js';
 import {
   ConfigEngine,
   MemoryConfigStorage,
@@ -6,7 +7,7 @@ import {
 } from './ConfigEngine.js';
 import { EventBus } from './EventBus.js';
 import { ModuleEngine, type ModuleLoader } from './ModuleEngine.js';
-import { ChromiumNativeBridge, type NativeBridge } from './NativeBridge.js';
+import { NoopBridge, type NativeBridge } from './NativeBridge.js';
 import { PerformanceEngine } from './PerformanceEngine.js';
 import type { OxygenModuleManifest } from '../../sdk/src/types.js';
 
@@ -31,7 +32,7 @@ export class OxygenCore {
       this.bus,
       options?.profileId ?? 'default'
     );
-    this.bridge = options?.bridge ?? new ChromiumNativeBridge();
+    this.bridge = options?.bridge ?? new NoopBridge();
     this.modules = new ModuleEngine(
       OXYGEN_CORE_VERSION,
       this.config,
@@ -60,6 +61,15 @@ export class OxygenCore {
       this.initialized = true;
       this.bus.emit('core:ready', { version: OXYGEN_CORE_VERSION });
     });
+  }
+
+  /**
+   * Applies a config bundle written by another context (another tab or the
+   * service worker) and brings module state in line with it.
+   */
+  async applyExternalBundle(bundle: OxygenConfigBundle): Promise<void> {
+    this.config.importBundle(JSON.stringify(bundle));
+    await this.modules.syncWithConfig();
   }
 
   getActiveThemeTokens(): Partial<ThemeTokens> {

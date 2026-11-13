@@ -80,6 +80,29 @@ export class ModuleEngine {
     }
   }
 
+  /**
+   * Re-aligns enabled state and module configs with the ConfigEngine after the
+   * bundle was replaced (e.g. by a change from another tab).
+   */
+  async syncWithConfig(): Promise<void> {
+    const persisted = new Set(this.config.getEnabledModuleIds());
+    for (const [id, entry] of this.registry.entries()) {
+      const wanted = persisted.has(id);
+      if (!wanted) {
+        if (entry.enabled || entry.instance) await this.disableModule(id);
+        continue;
+      }
+      if (!entry.instance) {
+        await this.enableModule(id);
+        continue;
+      }
+      if (entry.instance.onConfigChange) {
+        const ctx = this.createRestrictedContext(entry);
+        await entry.instance.onConfigChange(this.config.getModuleConfig(id), ctx);
+      }
+    }
+  }
+
   async enableModule(moduleId: string): Promise<void> {
     const entry = this.requireEntry(moduleId);
     if (entry.enabled && entry.instance) return;

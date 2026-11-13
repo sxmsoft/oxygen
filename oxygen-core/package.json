@@ -6,7 +6,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json",
-    "test": "node --test dist/oxygen-core/tests/oxygen-core.test.js"
+    "test": "node --test \"dist/oxygen-core/tests/*.test.js\""
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
